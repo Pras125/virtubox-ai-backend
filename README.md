@@ -65,3 +65,4 @@ Any Node host works (Render, Railway, Fly.io, a VPS, etc.). General steps:
 - The BM25 search here is a lightweight, dependency-free retrieval method — good for a few hundred to a few thousand chunks. If the docs site grows very large and answers start feeling imprecise, the natural upgrade path is swapping `lib/retrieval.js` for an embeddings-based vector search, but that adds another external API dependency, so it's left out for now.
 - The crawler respects same-domain links only and skips binary assets (images, PDFs, etc.) — it won't pull content from PDFs linked in the docs. If there's important content in PDFs, that would need a separate PDF-text-extraction step.
 - `MAX_REQUESTS_PER_MIN` in `.env` protects **your own backend** from abuse; it's separate from Groq's own per-key limits.
+# virtubox-ai-backend
