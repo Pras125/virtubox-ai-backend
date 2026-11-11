@@ -1,0 +1,21 @@
+# Alternative to PM2: plain systemd service.
+#   sudo cp deploy/virtubox-sales-copilot.service /etc/systemd/system/
+#   (edit User= and WorkingDirectory= below)
+#   sudo systemctl daemon-reload && sudo systemctl enable --now virtubox-sales-copilot
+#   journalctl -u virtubox-sales-copilot -f
+[Unit]
+Description=VirtuBox Sales Copilot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/virtubox-sales-copilot
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

@@ -1,17 +1,9 @@
-# Secrets
-.env
-.env.local
-.env.production.local
-
-# Dependencies
 node_modules/
-
-# Vercel
-.vercel/
-
-# macOS
+.env
+logs/
+data/chats/
+data/*.tmp
+data/drive-cache.json
+data/local-cache.json
+.vercel
 .DS_Store
-
-# Logs
-*.log
-npm-debug.log*

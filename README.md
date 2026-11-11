@@ -1,68 +1,125 @@
-# VirtuBox AI Backend
+# VirtuBox Sales Copilot
 
-A small Node/Express backend for the VirtuBox AI assistant that:
+A ChatGPT-style assistant for the VirtuBox sales team. A rep can ask it things in a client meeting, like "which solution fits a museum?", "what did we build for CGST?" or "the client says it's too expensive", and get a short answer they can read out, with sources. It runs 24/7 on the VirtuBox server.
 
-- **Hides your Groq API key(s)** — they live only in a `.env` file on the server, never sent to the browser (unlike the old single-file version, where anyone could view-source and steal the key).
-- **Actually reduces rate-limit hits** — via a request queue (serializes calls), automatic key rotation across multiple Groq keys, exponential backoff, and an optional fallback to OpenRouter if every Groq key is exhausted.
-- **Answers from the real content of `docs.virtubox.io` and `www.virtubox.io`** — a crawler script pulls the live text off both sites into a local index, and a lightweight BM25 search picks only the 5 most relevant chunks per question to inject into the prompt (instead of stuffing the whole site into every request — which is what actually blows through token-based rate limits).
+**Where answers come from** (rebuilt automatically every 24 h):
 
-## 1. Install
+| Source | How it's read |
+|---|---|
+| docs.virtubox.io | crawled, main content only |
+| www.virtubox.io + /resources | crawled |
+| Google Drive "One Pagers" folder | PDFs → text, **PNG/JPG one-pagers → read by Groq vision model**, Google Docs/Slides/Sheets → exported |
+| `knowledge/` folder on the server | md, txt, csv, pdf, images. Use it for pricing guidance, battle cards, FAQs |
 
-Requires Node.js 18+ (for built-in `fetch`).
+**Features:** team logins (each rep has their own chat history), streaming answers, chat sidebar with search/pin/rename, ⚡ Meeting mode (short answers) / 📄 Detailed mode, quick-start prompts, source chips linking back to the doc or one-pager, copy / WhatsApp share / read aloud, voice input (Hindi/English), Sales library panel, admin "Refresh knowledge" button with live log, mobile layout for phones in meetings. Groq keys stay on the server and rotate automatically, with an optional OpenRouter fallback.
+
+---
+
+## Deploy on Vercel
+
+1. On vercel.com choose **Add New → Project** and import this GitHub repo. Leave the build settings as they are (`vercel.json` sets them).
+2. Under **Environment Variables** add:
+
+   | Key | Value |
+   |---|---|
+   | `GROQ_API_KEYS` | one or more Groq keys, comma-separated |
+   | `TEAM_USERS` | `name:password,name:password` |
+   | `ADMIN_USERS` | e.g. `prashant` |
+   | `SESSION_SECRET` | a long random string (`openssl rand -hex 32`). Required, or logins break between requests |
+
+3. Deploy.
+4. For chat history that lasts: in the project's **Storage** tab add **Upstash for Redis** (free tier) and connect it to the project, then redeploy. It sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`. Without it the app works, but chat history is temporary and can disappear at any time.
+
+**How Vercel differs from the server install**
+
+- The knowledge index (`data/knowledge-index.json`) is read-only there. To refresh it, run `npm run ingest` on your computer, then commit and push the file; Vercel redeploys. The 24-hour auto-refresh and the admin "Refresh knowledge" buttons do not run on Vercel.
+- An answer must finish within 60 seconds (`maxDuration` in `vercel.json`).
+- The request rate limit is per server instance, so it is approximate.
+
+## Run locally
 
 ```bash
-cd virtubox-backend
 npm install
+cp .env.example .env    # then fill in GROQ_API_KEYS and TEAM_USERS
+npm start               # http://localhost:3000
 ```
 
-## 2. Configure
+---
+
+## Deploy on the VirtuBox server (Ubuntu/Debian)
 
 ```bash
-cp .env.example .env
+# 1. copy the folder to the server, e.g. /opt/virtubox-sales-copilot
+cd /opt/virtubox-sales-copilot
+
+# 2. first run creates .env and stops
+sudo bash deploy/setup.sh
+
+# 3. fill in .env (see below), then run again
+nano .env
+sudo bash deploy/setup.sh                       # → http://SERVER_IP:3000
+# or with a domain + free HTTPS (point DNS at the server first):
+sudo bash deploy/setup.sh copilot.virtubox.io   # → https://copilot.virtubox.io
 ```
 
-Edit `.env`:
+`setup.sh` installs Node 20 and PM2, installs dependencies, builds the knowledge index, starts the app under PM2 and registers it to start on boot. PM2 restarts it if it crashes.
 
-- `GROQ_API_KEYS` — comma-separated list of your Groq keys. Add as many as you have; the more you add, the more the server can absorb before it ever needs to back off.
-- `OPENROUTER_API_KEY` — optional. Only used as a last resort if all Groq keys are rate-limited at once. Free keys: https://openrouter.ai/keys
-- `CRAWL_SEED_URLS` — already set to `docs.virtubox.io` and `www.virtubox.io`.
-- `MAX_REQUESTS_PER_MIN` / `MAX_CONCURRENT_REQUESTS` — tune these to your Groq plan's actual limits.
+### .env — what to fill in
 
-## 3. Build the knowledge index (crawl the docs + website)
+| Key | What |
+|---|---|
+| `GROQ_API_KEYS` | one or more Groq keys, comma-separated (console.groq.com/keys) |
+| `TEAM_USERS` | `name:password,name:password`, one login per sales rep |
+| `ADMIN_USERS` | who sees the "Refresh knowledge" button |
+| `GOOGLE_API_KEY` | needed to read the Drive folder (below) |
+| `DRIVE_FOLDER_ID` | already set to the One Pagers folder |
+| `SESSION_SECRET` | auto-generated by setup.sh |
+
+### Getting the Google API key (5 minutes, free)
+1. Open https://console.cloud.google.com and create or select a project.
+2. Go to **APIs & Services → Library**, search "Google Drive API" and click **Enable**.
+3. Go to **APIs & Services → Credentials → Create credentials → API key**. Optionally restrict it to the Drive API.
+4. In Drive, share the One Pagers folder as **Anyone with the link → Viewer**.
+5. Paste the key into `.env` → `GOOGLE_API_KEY=...`, then run `npm run ingest:drive`.
+
+Files are cached by modified time, so the vision model only re-reads a one-pager when it changes. Images must be under 3.5 MB.
+
+---
+
+## Day-to-day
 
 ```bash
-npm run ingest
+pm2 status                         # is it running?
+pm2 logs virtubox-sales-copilot    # live logs
+pm2 restart virtubox-sales-copilot # after editing .env
+npm run ingest                     # rebuild everything now
+npm run ingest:drive               # only re-read Drive (new one-pager added)
+npm run ingest:local               # only re-read knowledge/
 ```
 
-This crawls both seed sites (same-domain links only, up to `CRAWL_MAX_PAGES` pages), strips nav/scripts/styles, and writes `data/knowledge-index.json`. It can take a few minutes depending on how many pages the docs site has.
+The running server reloads the index automatically after an ingest; you don't need to restart it. Admins can also do all of this from the app (⚙️ Refresh knowledge).
 
-Re-run this any time the docs/website content changes. If the server is already running, refresh it without a restart:
+**Adding a new user:** add `name:password` to `TEAM_USERS`, then `pm2 restart virtubox-sales-copilot`.
 
-```bash
-curl -X POST http://localhost:3000/api/reload-index
+**Health check for uptime monitors:** `GET /api/health` returns chunk counts and uptime.
+
+## Project layout
+
+```
+server.js                 Express app: auth, chat (SSE streaming), history, admin, auto-refresh
+lib/llm.js                Groq client: key rotation, backoff, OpenRouter fallback, vision
+lib/retrieval.js          BM25 search with title boost, sales files ranked first
+lib/auth.js               TEAM_USERS login, signed cookie
+lib/chatStore.js          per-user chat history: data/chats/*.json, or Redis on Vercel
+api/index.js · vercel.json  Vercel entry point and config
+lib/ingest/               sites.js (crawler) · drive.js · local.js · index.js
+public/index.html         the whole UI (no build step); vendor/ has marked + DOMPurify
+deploy/                   setup.sh · nginx.conf · systemd service (alternative to PM2)
+knowledge/                drop extra sales files here
 ```
 
-## 4. Run
-
-```bash
-npm start
-```
-
-Then open **http://localhost:3000** — the server serves the frontend (`public/index.html`) and the `/api/chat` endpoint from the same origin, so there's nothing else to configure.
-
-## 5. Deploy
-
-Any Node host works (Render, Railway, Fly.io, a VPS, etc.). General steps:
-
-1. Push this folder to a git repo (or upload it directly).
-2. Set the same environment variables from `.env` in your host's dashboard/secrets — **do not commit `.env`**.
-3. Set the start command to `npm start` (make sure a build/install step runs `npm install` first).
-4. Run `npm run ingest` once as a one-off job on the host (or run it locally and just deploy the resulting `data/knowledge-index.json` file — it's plain JSON).
-5. Re-run the ingest step periodically (e.g. a weekly cron job or manual re-deploy) to keep the index in sync as the docs/site change.
-
-## Notes / limits
-
-- The BM25 search here is a lightweight, dependency-free retrieval method — good for a few hundred to a few thousand chunks. If the docs site grows very large and answers start feeling imprecise, the natural upgrade path is swapping `lib/retrieval.js` for an embeddings-based vector search, but that adds another external API dependency, so it's left out for now.
-- The crawler respects same-domain links only and skips binary assets (images, PDFs, etc.) — it won't pull content from PDFs linked in the docs. If there's important content in PDFs, that would need a separate PDF-text-extraction step.
-- `MAX_REQUESTS_PER_MIN` in `.env` protects **your own backend** from abuse; it's separate from Groq's own per-key limits.
-# virtubox-ai-backend
+## Notes
+- The sales prompt (in `server.js`, `SYSTEM` + `BASELINE`) tells the model **never to invent prices, timelines or client names**. If something isn't in the material, it tells the rep to confirm with the product team. Add pricing guidance to `knowledge/` if you want it answered.
+- `www.virtubox.io/resources` loads its list with JavaScript, so the crawler may only see part of it. Put important resource PDFs in Drive or `knowledge/`.
+- Keep PM2 at 1 instance: chat history is stored in local files.
+- Back up `data/chats/` if the history matters.

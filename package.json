@@ -1,18 +1,21 @@
 {
-  "name": "virtubox-ai-backend",
-  "version": "1.0.0",
-  "description": "Backend for the VirtuBox AI assistant. Hides API keys server-side, queues/retries requests across multiple Groq keys (with optional OpenRouter fallback), and answers using a locally indexed RAG store built from docs.virtubox.io and virtubox.io.",
+  "name": "virtubox-sales-copilot",
+  "version": "2.0.0",
+  "description": "ChatGPT-style assistant for the VirtuBox sales team. Answers from docs.virtubox.io, virtubox.io, the sales Google Drive folder and local knowledge files. Runs 24/7 under PM2.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "ingest": "node scripts/ingest-sites.js"
+    "ingest": "node scripts/ingest.js",
+    "ingest:sites": "node scripts/ingest.js --only=sites",
+    "ingest:drive": "node scripts/ingest.js --only=drive",
+    "ingest:local": "node scripts/ingest.js --only=local"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
-    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "express-rate-limit": "^7.4.0"
+    "express-rate-limit": "^7.4.0",
+    "unpdf": "^0.12.2"
   },
   "engines": {
     "node": ">=18"
