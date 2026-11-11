@@ -29,11 +29,9 @@ mkdir -p logs data/chats knowledge && chown -R "$RUN_USER" logs data knowledge
 # 4. .env
 if [ ! -f .env ]; then
   cp .env.example .env
-  SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-  sed -i "s/^SESSION_SECRET=.*/SESSION_SECRET=$SECRET/" .env
   chown "$RUN_USER" .env; chmod 600 .env
   echo
-  echo "!!  Created .env — edit it now: GROQ_API_KEYS, TEAM_USERS, GOOGLE_API_KEY"
+  echo "!!  Created .env — edit it now: GROQ_API_KEYS, GOOGLE_API_KEY"
   echo "!!  then re-run:  sudo bash deploy/setup.sh $DOMAIN"
   exit 0
 fi

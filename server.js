@@ -18,7 +18,6 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
 
 app.use('/api/', rateLimit({ windowMs: 60_000, max: Number(process.env.MAX_REQUESTS_PER_MIN || 30), standardHeaders: true, legacyHeaders: false }));
-app.use('/api/login', rateLimit({ windowMs: 15 * 60_000, max: 20 }));
 
 // ───────────── Knowledge index (hot-reloads when the file changes) ─────────────
 let index = loadIndex(INDEX_PATH);
@@ -108,13 +107,11 @@ function labelFor(c) {
 }
 
 // ───────────── Routes ─────────────
-app.post('/api/login', auth.login);
-app.post('/api/logout', auth.logout);
 app.get('/api/health', (req, res) => res.json({ ok: true, uptime: Math.round(process.uptime()), index: indexInfo }));
 
-app.use('/api', auth.requireAuth);
+app.use('/api', auth.identify);
 
-app.get('/api/me', (req, res) => res.json({ user: req.user, admin: req.isAdmin, index: indexInfo }));
+app.get('/api/me', (req, res) => res.json({ admin: req.isAdmin, index: indexInfo }));
 app.get('/api/library', (req, res) => res.json(index.library()));
 
 app.get('/api/chats', wrap(async (req, res) => res.json(await store.list(req.user))));

@@ -145,18 +145,6 @@ a{color:var(--accent2)}
 </head>
 <body>
 
-<!-- Login -->
-<div id="login" class="hidden">
-  <form class="login-card" id="loginForm">
-    <div class="brand"><div class="logo">V</div>VirtuBox Sales Copilot</div>
-    <p>Sign in with your sales team login.</p>
-    <input class="field" id="lu" placeholder="Username" autocomplete="username" required>
-    <input class="field" id="lp" type="password" placeholder="Password" autocomplete="current-password" required>
-    <button class="btn" type="submit">Sign in</button>
-    <div class="err" id="loginErr"></div>
-  </form>
-</div>
-
 <aside id="sidebar">
   <div class="side-top">
     <div class="brand" style="padding:4px 4px 6px"><div class="logo">V</div>Sales Copilot</div>
@@ -167,7 +155,6 @@ a{color:var(--accent2)}
   <div class="side-bottom">
     <button class="side-link" id="libBtn">📚 Sales library</button>
     <button class="side-link hidden" id="adminBtn">⚙️ Refresh knowledge</button>
-    <div class="me"><span id="meName"></span><button class="side-link" id="logoutBtn" style="padding:4px 8px">Log out</button></div>
   </div>
 </aside>
 
@@ -226,29 +213,14 @@ const QUICK = [
 // ───────── API ─────────
 async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
-  if (r.status === 401 && path !== '/api/login') { showLogin(); throw new Error('Not logged in'); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
 }
 
-// ───────── Auth ─────────
-function showLogin() { $('#login').classList.remove('hidden'); setTimeout(() => $('#lu').focus(), 50); }
-$('#loginForm').onsubmit = async (e) => {
-  e.preventDefault();
-  $('#loginErr').textContent = '';
-  try {
-    await api('/api/login', { method: 'POST', body: { username: $('#lu').value, password: $('#lp').value } });
-    $('#login').classList.add('hidden');
-    boot();
-  } catch (err) { $('#loginErr').textContent = err.message; }
-};
-$('#logoutBtn').onclick = async () => { await api('/api/logout', { method: 'POST' }).catch(() => {}); location.reload(); };
-
 async function boot() {
   const me = await api('/api/me');
-  state.user = me.user; state.admin = me.admin;
-  $('#meName').textContent = '👤 ' + me.user;
+  state.admin = me.admin;
   $('#adminBtn').classList.toggle('hidden', !me.admin);
   await loadChats();
   const id = location.hash.slice(1);
@@ -380,7 +352,6 @@ async function send(text) {
   const paint = () => { raf = null; mdEl.innerHTML = md(full); mdEl.classList.add('cursor'); if (nearBottom()) scrollEnd(false); };
   try {
     const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, chatId: state.current, style: state.style }), signal: state.controller.signal });
-    if (r.status === 401) { showLogin(); throw new Error('Please log in again'); }
     if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `HTTP ${r.status}`); }
     const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
     for (;;) {
@@ -444,7 +415,7 @@ $('#libBtn').onclick = async () => {
   const items = await api('/api/library');
   modal('Sales library', items.length
     ? '<p style="color:var(--muted);margin-bottom:8px">One-pagers and sales files the copilot has read:</p>' + items.map((i) => `<div class="lib-item"><div>${esc(i.title)}<br><span>${i.source === 'drive' ? 'Google Drive' : 'knowledge folder'}</span></div>${i.url.startsWith('http') ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">Open ↗</a>` : ''}</div>`).join('')
-    : '<p>No sales files indexed yet. An admin needs to set <code>GOOGLE_API_KEY</code> and run a knowledge refresh, or drop files into the <code>knowledge/</code> folder.</p>');
+    : '<p>No sales files indexed yet. Set <code>GOOGLE_API_KEY</code> and run <code>npm run ingest</code>, or drop files into the <code>knowledge/</code> folder.</p>');
 };
 $('#adminBtn').onclick = async () => {
   const render = (s) => {
@@ -471,7 +442,7 @@ $('#adminBtn').onclick = async () => {
 };
 
 // start
-api('/api/me').then(() => boot()).catch(() => showLogin());
+boot().catch((e) => console.error(e));
 </script>
 </body>
 </html>
