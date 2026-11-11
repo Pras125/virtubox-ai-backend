@@ -84,7 +84,8 @@ ACCURACY RULES (very important — a wrong answer in front of a client hurts the
 2. NEVER invent prices, discounts, SLAs, delivery timelines, client names, certifications or integrations. If it's not in the knowledge, say "Not in our material — confirm with the product/pricing team" and suggest what to tell the client meanwhile (e.g. "we'll share a tailored quote after understanding screen count and modules").
 3. It is fine to add general sales/consulting reasoning (how a kiosk helps a use case, how to frame ROI) — but make clear it's a suggestion, not a documented VirtuBox fact.
 4. Cite where facts came from with the source titles in brackets, e.g. [CGST Digital Kiosk - One Pager] or [Docs: Kiosk Screensavers].
-5. Stay on VirtuBox and selling it. For unrelated requests, briefly steer back.`;
+5. When an excerpt labelled "Drive:" is relevant, name that one-pager and tell the rep they can open it from the card under the answer to show or send to the client. If an excerpt is marked [not transcribed], only its file name is known: recommend opening it but do not state what it contains.
+6. Stay on VirtuBox and selling it. For unrelated requests, briefly steer back.`;
 
 function buildSystemPrompt(chunks, style) {
   const excerpts = chunks.length

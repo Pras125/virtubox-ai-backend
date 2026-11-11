@@ -90,6 +90,12 @@ a{color:var(--accent2)}
 .thinking span:nth-child(2){animation-delay:.15s}.thinking span:nth-child(3){animation-delay:.3s}
 @keyframes b{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
 .sources{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.pagers{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;width:100%}
+.pager{display:flex;flex-direction:column;width:170px;max-width:46%;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;color:inherit;text-decoration:none;font-size:13px;line-height:1.35}
+.pager:hover{border-color:var(--accent)}
+.pager img{width:100%;height:150px;object-fit:cover;object-position:top;background:#fff;display:block}
+.pager span{padding:8px 10px}
+.pager b{display:block;color:var(--accent);font-size:11px;font-weight:600;margin-top:3px}
 .src{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:#cfd3db;text-decoration:none;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .src:hover{border-color:var(--accent)}
 .src b{color:var(--accent2);font-weight:600;margin-right:4px}
@@ -309,10 +315,18 @@ function addBot(text, sources) {
 const SRC_LABEL = { drive: 'One-pager', local: 'Sales file', docs: 'Docs', website: 'Web' };
 function renderSources(el, sources) {
   const box = el.querySelector('.sources');
-  box.innerHTML = (sources || []).slice(0, 6).map((s) => {
+  const all = sources || [];
+  // One-pagers from Drive get a preview card that opens the file; everything else is a small chip.
+  const pagers = all.filter((s) => s.source === 'drive').slice(0, 4).map((s) => {
+    const id = (s.url.match(/\/d\/([\w-]+)/) || [])[1];
+    const img = id ? `<img src="https://drive.google.com/thumbnail?id=${id}&sz=w400" alt="" loading="lazy" onerror="this.remove()">` : '';
+    return `<a class="pager" href="${esc(s.url)}" target="_blank" rel="noopener" title="${esc(s.title)}">${img}<span>${esc(s.title)}<b>Open one-pager ↗</b></span></a>`;
+  }).join('');
+  const chips = all.filter((s) => s.source !== 'drive').slice(0, 6).map((s) => {
     const href = s.url.startsWith('local://') ? '#' : s.url;
     return `<a class="src" href="${esc(href)}" target="_blank" rel="noopener" title="${esc(s.title)}"><b>${SRC_LABEL[s.source] || 'Source'}</b>${esc(s.title)}</a>`;
   }).join('');
+  box.innerHTML = (pagers ? `<div class="pagers">${pagers}</div>` : '') + chips;
 }
 function finishBot(el, text, sources) {
   el.querySelector('.md').classList.remove('cursor');
@@ -415,7 +429,7 @@ $('#libBtn').onclick = async () => {
   const items = await api('/api/library');
   modal('Sales library', items.length
     ? '<p style="color:var(--muted);margin-bottom:8px">One-pagers and sales files the copilot has read:</p>' + items.map((i) => `<div class="lib-item"><div>${esc(i.title)}<br><span>${i.source === 'drive' ? 'Google Drive' : 'knowledge folder'}</span></div>${i.url.startsWith('http') ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">Open ↗</a>` : ''}</div>`).join('')
-    : '<p>No sales files indexed yet. Set <code>GOOGLE_API_KEY</code> and run <code>npm run ingest</code>, or drop files into the <code>knowledge/</code> folder.</p>');
+    : '<p>No sales files indexed yet. Run <code>npm run ingest</code>, or drop files into the <code>knowledge/</code> folder.</p>');
 };
 $('#adminBtn').onclick = async () => {
   const render = (s) => {

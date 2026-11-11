@@ -66,10 +66,15 @@ sudo bash deploy/setup.sh copilot.virtubox.io   # → https://copilot.virtubox.i
 | Key | What |
 |---|---|
 | `GROQ_API_KEYS` | one or more Groq keys, comma-separated (console.groq.com/keys) |
-| `GOOGLE_API_KEY` | needed to read the Drive folder (below) |
+| `GOOGLE_API_KEY` | optional. Without it the public Drive folder page is read directly |
+| `DRIVE_EXCLUDE_FOLDERS` | optional. Drive sub-folders to leave out, e.g. `Solutions (Pricing)` |
 | `DRIVE_FOLDER_ID` | already set to the One Pagers folder |
 
-### Getting the Google API key (5 minutes, free)
+### One-pagers from Drive
+
+The Drive folder only has to be shared as **Anyone with the link → Viewer**; no API key is needed. `npm run ingest:drive` lists every file in it (sub-folders included). PDFs and Google Docs are read as text. Image one-pagers are read by the Groq vision model when `GROQ_API_KEYS` and a working `GROQ_VISION_MODEL` are set; otherwise they are indexed by file name only, so the copilot can still find and link them but cannot quote them. Answers that use a one-pager show a preview card that opens the file in Drive.
+
+### Getting a Google API key (optional)
 1. Open https://console.cloud.google.com and create or select a project.
 2. Go to **APIs & Services → Library**, search "Google Drive API" and click **Enable**.
 3. Go to **APIs & Services → Credentials → Create credentials → API key**. Optionally restrict it to the Drive API.
