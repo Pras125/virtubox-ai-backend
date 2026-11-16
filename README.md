@@ -72,7 +72,14 @@ sudo bash deploy/setup.sh copilot.virtubox.io   # → https://copilot.virtubox.i
 
 ### Banners
 
-Type a request such as "create a banner for the Print Kiosk with all its details" and the copilot replies with a 1080×1350 image. **Share on WhatsApp** opens the phone's share sheet with the image attached (on a computer it downloads the image and opens WhatsApp with the caption), and **Download image** saves the PNG. The wording comes from the same knowledge as chat answers, so a product whose one-pager is an untranscribed image only gets general points. To change a banner, ask in the same chat, e.g. "make the banner headline shorter".
+Type a request such as "create a banner for the Print Kiosk with all its details" and the copilot replies with a 1080×1350 image in the style of the one-pagers (white page, teal heading, coral and yellow accents, contact footer).
+
+- **Wording** comes from the same knowledge as chat answers, plus anything the rep types in the request.
+- **Product photo** comes from the best-matching Drive one-pager. `lib/bannerCrops.json` says where the photo sits on a one-pager (Drive file id → `x, y, w, h` as fractions of the page); one-pagers not listed there appear as the whole page.
+- **In the chat** the rep can edit every line (the image redraws as they type), switch between Light, Dark and Warm styles, and upload their own photo. These edits are not saved with the chat.
+- **Share on WhatsApp** opens the phone's share sheet with the image attached (on a computer it downloads the image and opens WhatsApp with the caption). **Download** saves the PNG.
+
+Image one-pagers are not transcribed automatically, so put a product's details in a text file in `knowledge/` (see `knowledge/print-kiosk.md`) and run `npm run ingest:local` to get them onto its banner.
 
 ### One-pagers from Drive
 

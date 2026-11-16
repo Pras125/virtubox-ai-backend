@@ -106,6 +106,14 @@ a{color:var(--accent2)}
 .banner-actions button{background:var(--accent);color:#1b0d05;font-weight:600;font-size:13.5px;border-radius:9px;padding:9px 14px}
 .banner-actions button.alt{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
 .banner-actions button:hover{filter:brightness(1.1)}
+.banner{max-width:380px}
+.banner-themes{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;color:var(--muted)}
+.banner-themes button{border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12.5px;color:var(--text)}
+.banner-themes button.on{border-color:var(--accent);color:var(--accent)}
+.banner-edit{display:flex;flex-direction:column;gap:10px;margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.banner-edit label{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--muted)}
+.banner-edit input,.banner-edit textarea{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px;color:var(--text);outline:none;resize:vertical}
+.banner-edit input:focus,.banner-edit textarea:focus{border-color:var(--accent)}
 .tools{display:flex;gap:4px;margin-top:8px}
 .tools button{font-size:12.5px;color:var(--muted);padding:5px 9px;border-radius:7px}
 .tools button:hover{background:var(--panel2);color:#fff}
@@ -325,27 +333,69 @@ function addBot(text, sources, banner) {
 // ───────── Banners ─────────
 async function showBanner(el, banner) {
   const box = el.querySelector('.banner');
-  const canvas = await renderBanner(banner);
-  const name = `VirtuBox - ${String(banner.title || 'banner').replace(/[^\w\- ]+/g, '').trim() || 'banner'}.png`;
+  const st = { data: JSON.parse(JSON.stringify(banner)), theme: 'light', photo: null };
   const caption = banner.caption || banner.tagline || '';
+  const fileName = () => `VirtuBox - ${String(st.data.title || 'banner').replace(/[^\w\- ]+/g, '').trim() || 'banner'}.png`;
+  const canvas = await renderBanner(st.data, st);
+  const redraw = () => renderBanner(st.data, { ...st, canvas });
   box.innerHTML = '';
   box.appendChild(canvas);
-  const actions = document.createElement('div'); actions.className = 'banner-actions';
-  actions.innerHTML = '<button data-b="share">Share on WhatsApp</button><button data-b="dl" class="alt">⬇ Download image</button>';
-  box.appendChild(actions);
+  const ui = document.createElement('div');
+  ui.innerHTML = `
+    <div class="banner-actions">
+      <button data-b="share">Share on WhatsApp</button>
+      <button data-b="dl" class="alt">⬇ Download</button>
+      <button data-b="edit" class="alt">✏️ Edit text</button>
+      <button data-b="photo" class="alt">🖼 Change photo</button>
+    </div>
+    <div class="banner-themes">Style: ${BANNER_THEMES.map((t) => `<button data-theme="${t.id}" class="${t.id === 'light' ? 'on' : ''}">${t.name}</button>`).join('')}</div>
+    <input type="file" accept="image/*" class="hidden">
+    <form class="banner-edit hidden">
+      <label>Heading<input name="title" maxlength="60"></label>
+      <label>Line under the heading<textarea name="tagline" rows="2" maxlength="150"></textarea></label>
+      <label>Points, one per line, written as "Title: detail"<textarea name="features" rows="6"></textarea></label>
+      <label>Specs, one per line, written as "Label: value"<textarea name="specs" rows="5"></textarea></label>
+      <label>Yellow strip ("Ideal for …")<input name="ideal" maxlength="150"></label>
+      <label>Button line at the bottom<input name="cta" maxlength="44"></label>
+    </form>`;
+  box.appendChild(ui);
   box.classList.remove('hidden');
+  const form = ui.querySelector('form'), file = ui.querySelector('input[type=file]');
+  const pairs = (txt, a, b) => txt.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const i = l.indexOf(':'); return i > 0 ? { [a]: l.slice(0, i).trim(), [b]: l.slice(i + 1).trim() } : { [a]: '', [b]: l }; });
+  const fill = () => {
+    form.title.value = st.data.title || ''; form.tagline.value = st.data.tagline || '';
+    form.features.value = (st.data.features || []).map((f) => typeof f === 'string' ? f : (f.title ? `${f.title}: ${f.text}` : f.text)).join('\n');
+    form.specs.value = (st.data.specs || []).map((x) => `${x.label}: ${x.value}`).join('\n');
+    form.ideal.value = st.data.ideal || ''; form.cta.value = st.data.cta || '';
+  };
+  let timer = null;
+  form.oninput = () => { // redraw as the rep types
+    Object.assign(st.data, { title: form.title.value, tagline: form.tagline.value, ideal: form.ideal.value, cta: form.cta.value,
+      features: pairs(form.features.value, 'title', 'text'), specs: pairs(form.specs.value, 'label', 'value').filter((x) => x.label) });
+    clearTimeout(timer); timer = setTimeout(redraw, 150);
+  };
+  form.onsubmit = (e) => e.preventDefault();
+  file.onchange = async () => {
+    const f = file.files[0]; if (!f) return;
+    const img = await loadBannerImage(URL.createObjectURL(f));
+    if (img) { st.photo = img; redraw(); }
+  };
   const blob = () => new Promise((res) => canvas.toBlob(res, 'image/png'));
   const download = async () => {
-    const a = document.createElement('a'); a.href = URL.createObjectURL(await blob()); a.download = name;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await blob()); a.download = fileName();
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   };
-  actions.onclick = async (e) => {
+  ui.onclick = async (e) => {
+    const th = e.target.dataset.theme;
+    if (th) { st.theme = th; ui.querySelectorAll('[data-theme]').forEach((x) => x.classList.toggle('on', x === e.target)); return redraw(); }
     const b = e.target.dataset.b; if (!b) return;
     if (b === 'dl') return download();
+    if (b === 'photo') return file.click();
+    if (b === 'edit') { fill(); form.classList.toggle('hidden'); return; }
     // Phones: the share sheet sends the image itself to WhatsApp. Desktop: save it, then open WhatsApp with the caption.
-    const file = new File([await blob()], name, { type: 'image/png' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], text: caption }); } catch { /* share sheet closed */ }
+    const f = new File([await blob()], fileName(), { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [f] })) {
+      try { await navigator.share({ files: [f], text: caption }); } catch { /* share sheet closed */ }
       return;
     }
     await download();

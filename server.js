@@ -105,13 +105,15 @@ const BANNER_ASK = /\b(create|make|generate|design|build|prepare|draft|give|send
 const isBannerRequest = (m) => BANNER_WORD.test(m) && BANNER_ASK.test(m) && !/\bflash banners?\b/i.test(m);
 const BANNER_SYSTEM = `You write the copy for a VirtuBox sales banner: one portrait image a salesperson sends to a client on WhatsApp.
 Return ONLY a JSON object, no markdown and no commentary, in exactly this shape:
-{"title":"","tagline":"","features":[""],"specs":[{"label":"","value":""}],"cta":"","caption":""}
+{"title":"","tagline":"","features":[{"title":"","text":""}],"specs":[{"label":"","value":""}],"ideal":"","cta":"","caption":""}
 
-- title: the product or solution name, at most 5 words.
+- title: the product or solution name, at most 4 words. Do not prefix it with "VirtuBox".
 - tagline: one benefit-led sentence for the client, at most 16 words.
-- features: 4 to 6 short points, at most 9 words each, written as client benefits.
-- specs: 0 to 6 hardware or technical details (label at most 3 words, value at most 5 words). Include a spec ONLY if it is stated in the knowledge. If none are stated, return [].
+- features: 4 to 6 client benefits, each with a title of at most 3 words and a text of at most 10 words.
+- specs: 0 to 9 hardware or technical details (label at most 3 words, value at most 4 words). Include a spec ONLY if it is stated in the knowledge. If none are stated, return [].
+- ideal: one line starting "Ideal for" that lists the places or industries the knowledge names for this product, at most 16 words. If the knowledge names none, return "".
 - cta: at most 5 words, e.g. "Book a free demo".
+- If the salesperson typed their own wording, details or offer in the request, use it as they wrote it.
 - caption: a 2-3 sentence WhatsApp message to send with the image.
 
 ACCURACY: every factual claim (features, specs, numbers, client names) must come from the knowledge below. Never invent prices, specs, numbers, certifications or client names, and never include a price unless the salesperson typed it in their request. If the knowledge says little about this product, keep the points general and true to what is there. An excerpt marked [not transcribed] gives a file name only: do not guess its contents.
@@ -127,13 +129,24 @@ function parseBanner(raw) {
   const banner = {
     title: str(j.title, 60),
     tagline: str(j.tagline, 140),
-    features: (Array.isArray(j.features) ? j.features : []).map((f) => str(f, 90)).filter(Boolean).slice(0, 6),
-    specs: (Array.isArray(j.specs) ? j.specs : []).map((x) => ({ label: str(x && x.label, 28), value: str(x && x.value, 40) })).filter((x) => x.label && x.value).slice(0, 6),
+    features: (Array.isArray(j.features) ? j.features : []).map((f) => (f && typeof f === 'object' ? { title: str(f.title, 34), text: str(f.text, 90) } : { title: '', text: str(f, 120) })).filter((f) => f.title || f.text).slice(0, 6),
+    specs: (Array.isArray(j.specs) ? j.specs : []).map((x) => ({ label: str(x && x.label, 28), value: str(x && x.value, 40) })).filter((x) => x.label && x.value).slice(0, 9),
+    ideal: str(j.ideal, 150),
     cta: str(j.cta, 44) || 'Book a free demo',
     caption: str(j.caption, 600),
   };
   if (!banner.title || !banner.features.length) throw new Error('The AI returned an incomplete banner. Please try again.');
   return banner;
+}
+
+// The banner's product photo comes from the best-matching Drive one-pager.
+const BANNER_CROPS = require('./lib/bannerCrops.json');
+const driveId = (url) => (String(url).match(/\/d\/([\w-]+)/) || [])[1];
+function bannerImage(sources, prev) {
+  const s = sources.find((x) => x.source === 'drive' && driveId(x.url));
+  if (!s) return prev || null; // an edit like "make the headline shorter" keeps the earlier photo
+  const id = driveId(s.url);
+  return { id, crop: BANNER_CROPS[id] || null, title: s.title };
 }
 
 async function makeBanner(message, chunks, history) {
@@ -167,6 +180,18 @@ app.use('/api', auth.identify);
 
 app.get('/api/me', (req, res) => res.json({ admin: req.isAdmin, index: indexInfo }));
 app.get('/api/library', (req, res) => res.json(index.library()));
+
+// One-pager preview for banners, served from our own address so the browser may draw it into the image.
+// Only files that are in the knowledge index can be fetched.
+app.get('/api/thumb/:id', wrap(async (req, res) => {
+  const id = req.params.id;
+  if (!index.library().some((d) => d.source === 'drive' && driveId(d.url) === id)) return res.status(404).end();
+  const r = await fetch(`https://drive.google.com/thumbnail?id=${id}&sz=w1600`, { redirect: 'follow' });
+  const type = r.headers.get('content-type') || '';
+  if (!r.ok || !type.startsWith('image/')) return res.status(502).end();
+  res.set({ 'Content-Type': type, 'Cache-Control': 'public, max-age=86400, s-maxage=604800' });
+  res.send(Buffer.from(await r.arrayBuffer()));
+}));
 
 app.get('/api/chats', wrap(async (req, res) => res.json(await store.list(req.user))));
 app.get('/api/chats/:id', wrap(async (req, res) => {
@@ -209,6 +234,11 @@ app.post('/api/chat', wrap(async (req, res) => {
   try {
     if (wantsBanner) {
       const banner = await makeBanner(message, chunks, history);
+      const prevBanner = [...convo.messages].reverse().find((m) => m.banner);
+      // match the photo on this request alone, so an earlier turn's product does not leak in
+      const own = dedupeSources(index.search(message, 7));
+      const image = bannerImage(own, prevBanner && prevBanner.banner.image);
+      if (image) banner.image = image;
       const text = bannerText(banner);
       if (!aborted) { send({ banner }); send({ delta: text }); }
       await store.append(req.user, convo.id, { role: 'user', content: message }, { role: 'assistant', content: text, sources, banner });
