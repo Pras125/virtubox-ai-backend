@@ -77,7 +77,7 @@ HOW TO ANSWER
 - If the rep writes in Hindi or Hinglish, reply in the same style.
 
 WHAT YOU HELP WITH
-Product & feature questions · mapping VirtuBox to a client's industry/use case (retail, government, museums, events, F&B, hospitality, real estate, education, healthcare, corporate) · real deployments and case studies from the one-pagers · objection handling · demo scripts · discovery questions · follow-up emails / WhatsApp messages · proposal and solution outlines · technical answers for IT teams (hardware, offline mode, integrations, admin panels).
+Product & feature questions · mapping VirtuBox to a client's industry/use case (retail, government, museums, events, F&B, hospitality, real estate, education, healthcare, corporate) · real deployments and case studies from the one-pagers · objection handling · demo scripts · discovery questions · follow-up emails / WhatsApp messages · shareable banners (the rep types "create a banner for …" and gets an image) · proposal and solution outlines · technical answers for IT teams (hardware, offline mode, integrations, admin panels).
 
 ACCURACY RULES (very important — a wrong answer in front of a client hurts the deal)
 1. Use only the KNOWLEDGE below for facts about VirtuBox: features, clients, deployments, numbers, specs. Prefer excerpts from Drive one-pagers and docs over the baseline.
@@ -95,6 +95,59 @@ function buildSystemPrompt(chunks, style) {
     ? 'The rep asked for a DETAILED answer: be thorough, use sections.'
     : 'MEETING MODE: keep the answer under ~150 words unless the rep asks for a document (email, proposal, script).';
   return `${SYSTEM}\n\n${len}\n\n<baseline>\n${BASELINE}\n</baseline>\n\n<knowledge_excerpts>\n${excerpts}\n</knowledge_excerpts>`;
+}
+
+// ───────────── Banners ─────────────
+// "create a banner for the print kiosk" → the model writes the copy as JSON and the browser draws the image.
+// Needs an ask ("create/make/need … banner"), so questions about the kiosk "flash banner" feature stay normal chat.
+const BANNER_WORD = /\b(banners?|posters?|flyers?)\b/i;
+const BANNER_ASK = /\b(create|make|generate|design|build|prepare|draft|give|send|need|want|get|change|update|edit|redo|shorten|add|remove|bana\w*|chahiye)\b/i;
+const isBannerRequest = (m) => BANNER_WORD.test(m) && BANNER_ASK.test(m) && !/\bflash banners?\b/i.test(m);
+const BANNER_SYSTEM = `You write the copy for a VirtuBox sales banner: one portrait image a salesperson sends to a client on WhatsApp.
+Return ONLY a JSON object, no markdown and no commentary, in exactly this shape:
+{"title":"","tagline":"","features":[""],"specs":[{"label":"","value":""}],"cta":"","caption":""}
+
+- title: the product or solution name, at most 5 words.
+- tagline: one benefit-led sentence for the client, at most 16 words.
+- features: 4 to 6 short points, at most 9 words each, written as client benefits.
+- specs: 0 to 6 hardware or technical details (label at most 3 words, value at most 5 words). Include a spec ONLY if it is stated in the knowledge. If none are stated, return [].
+- cta: at most 5 words, e.g. "Book a free demo".
+- caption: a 2-3 sentence WhatsApp message to send with the image.
+
+ACCURACY: every factual claim (features, specs, numbers, client names) must come from the knowledge below. Never invent prices, specs, numbers, certifications or client names, and never include a price unless the salesperson typed it in their request. If the knowledge says little about this product, keep the points general and true to what is there. An excerpt marked [not transcribed] gives a file name only: do not guess its contents.
+If the salesperson asks to change an earlier banner, apply the change and return the full JSON again. Write in the language the salesperson used.`;
+
+function parseBanner(raw) {
+  const s = String(raw || '');
+  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a < 0 || b <= a) throw new Error('The AI did not return banner content. Please try again.');
+  let j;
+  try { j = JSON.parse(s.slice(a, b + 1)); } catch { throw new Error('The AI returned banner content that could not be read. Please try again.'); }
+  const str = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+  const banner = {
+    title: str(j.title, 60),
+    tagline: str(j.tagline, 140),
+    features: (Array.isArray(j.features) ? j.features : []).map((f) => str(f, 90)).filter(Boolean).slice(0, 6),
+    specs: (Array.isArray(j.specs) ? j.specs : []).map((x) => ({ label: str(x && x.label, 28), value: str(x && x.value, 40) })).filter((x) => x.label && x.value).slice(0, 6),
+    cta: str(j.cta, 44) || 'Book a free demo',
+    caption: str(j.caption, 600),
+  };
+  if (!banner.title || !banner.features.length) throw new Error('The AI returned an incomplete banner. Please try again.');
+  return banner;
+}
+
+async function makeBanner(message, chunks, history) {
+  const excerpts = chunks.length ? chunks.map((c, i) => `[${i + 1}] ${labelFor(c)}\n${c.text}`).join('\n\n---\n\n') : '(no matching excerpts found)';
+  const raw = await chat([
+    { role: 'system', content: `${BANNER_SYSTEM}\n\n<baseline>\n${BASELINE}\n</baseline>\n\n<knowledge_excerpts>\n${excerpts}\n</knowledge_excerpts>` },
+    ...history,
+    { role: 'user', content: message },
+  ], { temperature: 0.3, max_tokens: 1500 });
+  return parseBanner(raw);
+}
+
+function bannerText(b) {
+  return `**Banner ready: ${b.title}**\n\n${b.caption || b.tagline}\n\n_Check the details against the one-pager before sending it to a client. To change it, just say so, e.g. "make the banner headline shorter"._`;
 }
 
 function sourceOf(c) {
@@ -146,14 +199,23 @@ app.post('/api/chat', wrap(async (req, res) => {
   const sources = dedupeSources(chunks);
   send({ sources });
 
-  const history = convo.messages.slice(-12).map((m) => ({ role: m.role, content: m.content }));
+  // earlier banners are replayed as their JSON so "change the headline" edits the same banner
+  const history = convo.messages.slice(-12).map((m) => ({ role: m.role, content: m.banner ? JSON.stringify(m.banner) : m.content }));
+  const wantsBanner = isBannerRequest(message);
   const messages = [{ role: 'system', content: buildSystemPrompt(chunks, style) }, ...history, { role: 'user', content: message }];
 
   let aborted = false;
   res.on('close', () => { aborted = true; });
   try {
-    const { text, provider } = await streamChat(messages, (d) => { if (!aborted) send({ delta: d }); }, { max_tokens: style === 'detailed' ? 2500 : 1200 });
-    await store.append(req.user, convo.id, { role: 'user', content: message }, { role: 'assistant', content: text, sources, provider });
+    if (wantsBanner) {
+      const banner = await makeBanner(message, chunks, history);
+      const text = bannerText(banner);
+      if (!aborted) { send({ banner }); send({ delta: text }); }
+      await store.append(req.user, convo.id, { role: 'user', content: message }, { role: 'assistant', content: text, sources, banner });
+    } else {
+      const { text, provider } = await streamChat(messages, (d) => { if (!aborted) send({ delta: d }); }, { max_tokens: style === 'detailed' ? 2500 : 1200 });
+      await store.append(req.user, convo.id, { role: 'user', content: message }, { role: 'assistant', content: text, sources, provider });
+    }
     if (isNew) {
       // awaited (not fire-and-forget) so it also completes on serverless, where work after the response is cut off
       await makeTitle(message).then((t) => t && store.update(req.user, convo.id, { title: t })).catch(() => {});

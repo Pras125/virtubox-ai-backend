@@ -70,6 +70,10 @@ sudo bash deploy/setup.sh copilot.virtubox.io   # → https://copilot.virtubox.i
 | `DRIVE_EXCLUDE_FOLDERS` | optional. Drive sub-folders to leave out, e.g. `Solutions (Pricing)` |
 | `DRIVE_FOLDER_ID` | already set to the One Pagers folder |
 
+### Banners
+
+Type a request such as "create a banner for the Print Kiosk with all its details" and the copilot replies with a 1080×1350 image. **Share on WhatsApp** opens the phone's share sheet with the image attached (on a computer it downloads the image and opens WhatsApp with the caption), and **Download image** saves the PNG. The wording comes from the same knowledge as chat answers, so a product whose one-pager is an untranscribed image only gets general points. To change a banner, ask in the same chat, e.g. "make the banner headline shorter".
+
 ### One-pagers from Drive
 
 The Drive folder only has to be shared as **Anyone with the link → Viewer**; no API key is needed. `npm run ingest:drive` lists every file in it (sub-folders included). PDFs and Google Docs are read as text. Image one-pagers are read by the Groq vision model when `GROQ_API_KEYS` and a working `GROQ_VISION_MODEL` are set; otherwise they are indexed by file name only, so the copilot can still find and link them but cannot quote them. Answers that use a one-pager show a preview card that opens the file in Drive.
