@@ -114,7 +114,7 @@
   }
 
   function normalize(b) {
-    const str = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+    const str = (v, n) => String(v == null ? '' : v).replace(/[\u2010\u2011]/g, '-').replace(/\s+/g, ' ').trim().slice(0, n);
     return {
       title: str(b && b.title, 60) || 'VirtuBox',
       tagline: str(b && b.tagline, 140),
