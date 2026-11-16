@@ -111,7 +111,8 @@ Return ONLY a JSON object, no markdown and no commentary, in exactly this shape:
 - tagline: one benefit-led sentence for the client, at most 16 words.
 - features: 4 to 6 client benefits, each with a title of at most 3 words and a text of at most 10 words.
 - specs: 0 to 9 hardware or technical details (label at most 3 words, value at most 4 words). Include a spec ONLY if it is stated in the knowledge. If none are stated, return [].
-- ideal: one line starting "Ideal for" that lists the places or industries the knowledge names for this product, at most 16 words. If the knowledge names none, return "".
+- ideal: one line starting "Ideal for", listing ONLY places or industries that the knowledge names for this exact product, at most 16 words. If the knowledge names none, return "".
+- When the knowledge has a specifications list for this product, always fill specs from it.
 - cta: at most 5 words, e.g. "Book a free demo".
 - If the salesperson typed their own wording, details or offer in the request, use it as they wrote it.
 - caption: a 2-3 sentence WhatsApp message to send with the image.
@@ -233,7 +234,10 @@ app.post('/api/chat', wrap(async (req, res) => {
   res.on('close', () => { aborted = true; });
   try {
     if (wantsBanner) {
-      const banner = await makeBanner(message, chunks, history);
+      // a banner needs the whole product sheet (specs, use cases), not just the best-matching part of it
+      const sheetUrls = new Set(chunks.filter((c) => c.source === 'local' || c.source === 'drive').slice(0, 3).map((c) => c.url));
+      const sheet = index.docs.filter((d) => sheetUrls.has(d.url) && !chunks.includes(d)).slice(0, 8);
+      const banner = await makeBanner(message, [...chunks, ...sheet], history);
       const prevBanner = [...convo.messages].reverse().find((m) => m.banner);
       // match the photo on this request alone, so an earlier turn's product does not leak in
       const own = dedupeSources(index.search(message, 7));
