@@ -100,10 +100,12 @@ function buildSystemPrompt(chunks, style) {
 // ───────────── Banners ─────────────
 // "create a banner for the print kiosk" → the model writes the copy as JSON and the browser draws the image.
 // Needs an ask ("create/make/need … banner"), so questions about the kiosk "flash banner" feature stay normal chat.
-const BANNER_WORD = /\b(banners?|posters?|flyers?)\b/i;
+const BANNER_WORD = /\b(banners?|posters?|flyers?|infographics?|creatives?|(whatsapp|wa|insta(gram)?)\s+(status|stor(y|ies)))\b/i;
+const STORY_WORD = /\b(infographics?|(whatsapp|wa|insta(gram)?)\s+(status|stor(y|ies))|stor(y|ies)|9:16)\b/i; // tall 9:16 layout
 const BANNER_ASK = /\b(create|make|generate|design|build|prepare|draft|give|send|need|want|get|change|update|edit|redo|shorten|add|remove|bana\w*|chahiye)\b/i;
 const isBannerRequest = (m) => BANNER_WORD.test(m) && BANNER_ASK.test(m) && !/\bflash banners?\b/i.test(m);
-const BANNER_SYSTEM = `You write the copy for a VirtuBox sales banner: one portrait image a salesperson sends to a client on WhatsApp.
+const BANNER_SYSTEM = `You write the copy for a VirtuBox sales banner or infographic: one portrait image a salesperson posts as a WhatsApp status or sends to a client.
+For an infographic or story, give 5 to 6 features and fill specs and ideal whenever the knowledge allows, so the image is rich with real content.
 Return ONLY a JSON object, no markdown and no commentary, in exactly this shape:
 {"title":"","tagline":"","features":[{"title":"","text":""}],"specs":[{"label":"","value":""}],"ideal":"","cta":"","caption":""}
 
@@ -120,7 +122,7 @@ Return ONLY a JSON object, no markdown and no commentary, in exactly this shape:
 ACCURACY: every factual claim (features, specs, numbers, client names) must come from the knowledge below. Never invent prices, specs, numbers, certifications or client names, and never include a price unless the salesperson typed it in their request. If the knowledge says little about this product, keep the points general and true to what is there. An excerpt marked [not transcribed] gives a file name only: do not guess its contents.
 If the salesperson asks to change an earlier banner, apply the change and return the full JSON again. Write in the language the salesperson used.`;
 
-function parseBanner(raw) {
+function parseBanner(raw, story) {
   const s = String(raw || '');
   const a = s.indexOf('{'), b = s.lastIndexOf('}');
   if (a < 0 || b <= a) throw new Error('The AI did not return banner content. Please try again.');
@@ -136,6 +138,7 @@ function parseBanner(raw) {
     cta: str(j.cta, 44) || 'Book a free demo',
     caption: str(j.caption, 600),
   };
+  banner.format = story ? 'story' : 'post';
   if (!banner.title || !banner.features.length) throw new Error('The AI returned an incomplete banner. Please try again.');
   return banner;
 }
@@ -150,14 +153,14 @@ function bannerImage(sources, prev) {
   return { id, crop: BANNER_CROPS[id] || null, title: s.title };
 }
 
-async function makeBanner(message, chunks, history) {
+async function makeBanner(message, chunks, history, story) {
   const excerpts = chunks.length ? chunks.map((c, i) => `[${i + 1}] ${labelFor(c)}\n${c.text}`).join('\n\n---\n\n') : '(no matching excerpts found)';
   const raw = await chat([
     { role: 'system', content: `${BANNER_SYSTEM}\n\n<baseline>\n${BASELINE}\n</baseline>\n\n<knowledge_excerpts>\n${excerpts}\n</knowledge_excerpts>` },
     ...history,
     { role: 'user', content: message },
   ], { temperature: 0.3, max_tokens: 1500 });
-  return parseBanner(raw);
+  return parseBanner(raw, story);
 }
 
 function bannerText(b) {
@@ -237,8 +240,10 @@ app.post('/api/chat', wrap(async (req, res) => {
       // a banner needs the whole product sheet (specs, use cases), not just the best-matching part of it
       const sheetUrls = new Set(chunks.filter((c) => c.source === 'local' || c.source === 'drive').slice(0, 3).map((c) => c.url));
       const sheet = index.docs.filter((d) => sheetUrls.has(d.url) && !chunks.includes(d)).slice(0, 8);
-      const banner = await makeBanner(message, [...chunks, ...sheet], history);
       const prevBanner = [...convo.messages].reverse().find((m) => m.banner);
+      // an edit ("make the headline shorter") keeps the earlier banner's shape unless the rep names a new one
+      const story = STORY_WORD.test(message) || (!BANNER_WORD.test(message) ? false : /\b(post|banner|poster|flyer)\b/i.test(message) ? false : !!(prevBanner && prevBanner.banner.format === 'story'));
+      const banner = await makeBanner(message, [...chunks, ...sheet], history, story);
       // match the photo on this request alone, so an earlier turn's product does not leak in
       const own = dedupeSources(index.search(message, 7));
       const image = bannerImage(own, prevBanner && prevBanner.banner.image);

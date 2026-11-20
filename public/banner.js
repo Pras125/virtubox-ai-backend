@@ -1,8 +1,10 @@
-// Draws a shareable sales banner (1080×1350 PNG, the portrait size WhatsApp shows in full) on a canvas,
+// Draws a shareable sales banner or infographic (1080×1350 post, or 1080×1920 story for WhatsApp status) on a canvas,
 // in the style of the VirtuBox one-pagers: white page, teal headings, coral and yellow accents, product photo.
 // Input: { title, tagline, features: [{ title, text }], specs: [{ label, value }], ideal, cta, image: { id, crop } }
 (function () {
-  const W = 1080, H = 1350, PAD = 64;
+  const W = 1080, PAD = 64;
+  const SIZES = { post: 1350, story: 1920 }; // post = 4:5 for chats and feeds, story = 9:16 for WhatsApp status / stories
+  const SAFE = { top: 70, bottom: 150 };     // story: WhatsApp covers the top and bottom strip with its own buttons
   const FONT = 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   const TEAL = '#1e7da0', CYAN = '#00a3b5', CORAL = '#ec5f43', YELLOW = '#f4b81f';
   const CONTACT = { email: 'hello@virtubox.io', phone: '+91 9810473340', site: 'www.virtubox.io' };
@@ -40,6 +42,12 @@
     ctx.fillStyle = YELLOW; ctx.beginPath(); ctx.arc(x + r * 3.4, y - r, r, 0, Math.PI * 2); ctx.fill();
   }
 
+  function label(ctx, text, x, y, px, T) {
+    ctx.font = `800 ${px(22)}px ${FONT}`; ctx.fillStyle = CORAL; ctx.fillText(text.toUpperCase().split('').join('\u200a'), x, y);
+    const w = ctx.measureText(text.toUpperCase().split('').join('\u200a')).width;
+    ctx.fillStyle = T.line; ctx.fillRect(x + w + 16, y - px(8), W - PAD - x - w - 16, 2);
+  }
+
   // Product photo: a cropped region of the one-pager when we know where the photo is, otherwise the whole page as a tilted card.
   function drawPhoto(ctx, img, crop, x, y, w, h) {
     ctx.save();
@@ -62,6 +70,7 @@
 
   // Lays the banner out at type scale k. Returns the y where the content ends, so the caller can pick the largest k that fits.
   function draw(ctx, d, k, T, img) {
+    const story = d.format === 'story', H = SIZES[d.format], o = story ? SAFE.top : 0;
     const px = (n) => Math.round(n * k);
     const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, T.bg[0]); bg.addColorStop(1, T.bg[1]);
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
@@ -74,12 +83,12 @@
 
     // brand row
     ctx.font = `800 42px ${FONT}`; ctx.fillStyle = T.brand;
-    ctx.fillText('VirtuBox', PAD, 92);
-    dots(ctx, PAD + ctx.measureText('VirtuBox').width + 8, 92, 6);
+    ctx.fillText('VirtuBox', PAD, 92 + o);
+    dots(ctx, PAD + ctx.measureText('VirtuBox').width + 8, 92 + o, 6);
     ctx.font = `500 22px ${FONT}`; ctx.fillStyle = T.muted; ctx.textAlign = 'right';
-    ctx.fillText('Interactive kiosk & signage solutions', W - PAD, 88); ctx.textAlign = 'left';
-    ctx.fillStyle = CORAL; ctx.fillRect(PAD, 118, W - PAD * 2, 2);
-    let y = 118 + px(22);
+    ctx.fillText('Interactive kiosk & signage solutions', W - PAD, 88 + o); ctx.textAlign = 'left';
+    ctx.fillStyle = CORAL; ctx.fillRect(PAD, 118 + o, W - PAD * 2, 2);
+    let y = 118 + o + px(22);
 
     // title
     ctx.font = `800 ${px(86)}px ${FONT}`;
@@ -97,13 +106,36 @@
     y += px(34);
 
     // photo (left) + feature cards (right)
-    const pw = img ? 320 : 0, gap = img ? 32 : 0;
+    // post: photo left, cards right. story: wide photo on top, cards full width below.
+    let pw = img ? 320 : 0, gap = img ? 32 : 0;
+    if (story && img) {
+      const ph = px(470);
+      drawPhoto(ctx, img, d.crop, PAD, y, W - PAD * 2, ph);
+      y += ph + px(28); pw = 0; gap = 0; img = null;
+    }
     const fx = PAD + pw + gap, fw = W - PAD - fx;
     const top = y;
-    for (const f of d.features) {
+    if (story) { y += px(26); label(ctx, 'Why it works', PAD, y, px, T); y += px(26); }
+    const stepY = [];
+    for (const [fi, f] of d.features.entries()) {
+      if (story) {
+        const r = px(30), tx = PAD + r * 2 + 26, tw = W - PAD - tx - 20;
+        ctx.font = `400 ${px(26)}px ${FONT}`;
+        const lines = f.text ? wrap(ctx, f.text, tw).slice(0, 3) : [];
+        const ch = Math.max(r * 2 + px(8), px(14) + (f.title ? px(36) : 0) + lines.length * px(34) + px(18));
+        ctx.fillStyle = T.card; rr(ctx, PAD + r, y, W - PAD * 2 - r, ch, 16); ctx.fill();
+        ctx.strokeStyle = T.line; ctx.lineWidth = 2; ctx.stroke();
+        stepY.push([y + ch / 2, ch]);
+        let ty = y + px(14);
+        if (f.title) { ctx.fillStyle = T.text; ctx.font = `800 ${px(30)}px ${FONT}`; ty += px(30); ctx.fillText(clip(ctx, f.title, tw), tx, ty); ty += px(6); }
+        ctx.fillStyle = T.muted === '#5c6670' ? '#3c4650' : T.text; ctx.font = `400 ${px(26)}px ${FONT}`;
+        lines.forEach((l) => { ty += px(34); ctx.fillText(l, tx, ty); });
+        y += ch + px(20);
+        continue;
+      }
       const tw = fw - 30 - 54;
       ctx.font = `400 ${px(25)}px ${FONT}`;
-      const lines = f.text ? wrap(ctx, f.text, tw).slice(0, 2) : [];
+      const lines = f.text ? wrap(ctx, f.text, tw).slice(0, story ? 3 : 2) : [];
       const ch = px(26) + (f.title ? px(34) : 0) + lines.length * px(32) + px(10);
       ctx.fillStyle = T.card; rr(ctx, fx, y, fw, ch, 14); ctx.fill();
       ctx.strokeStyle = T.line; ctx.lineWidth = 2; ctx.stroke();
@@ -113,6 +145,19 @@
       ctx.fillStyle = T.text; ctx.font = `400 ${px(25)}px ${FONT}`;
       lines.forEach((l) => { ty += px(32); ctx.fillText(l, fx + 24, ty); });
       y += ch + px(14);
+    }
+    if (story) {
+      y -= px(20);
+      // connector line and numbered badges drawn over the cards' left edge
+      const r = px(30), cx = PAD + r;
+      if (stepY.length > 1) { ctx.strokeStyle = CORAL; ctx.lineWidth = 4; ctx.setLineDash([2, 10]); ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(cx, stepY[0][0]); ctx.lineTo(cx, stepY[stepY.length - 1][0]); ctx.stroke(); ctx.setLineDash([]); }
+      const cols = [CORAL, TEAL, YELLOW, CYAN];
+      stepY.forEach(([cy], i) => {
+        ctx.fillStyle = cols[i % 4]; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 5; ctx.strokeStyle = T.bg[1]; ctx.stroke();
+        ctx.fillStyle = i % 4 === 2 ? '#1b1f24' : '#ffffff'; ctx.font = `800 ${px(30)}px ${FONT}`; ctx.textAlign = 'center';
+        ctx.fillText(String(i + 1), cx, cy + px(10)); ctx.textAlign = 'left';
+      });
     }
     y -= px(14);
     if (img) {
@@ -124,6 +169,7 @@
 
     // specs: three-column cards with coral / yellow / teal labels
     if (d.specs.length) {
+      if (story) { y += px(34); label(ctx, 'Specifications', PAD, y, px, T); y += px(24); }
       const g = 16, cw = (W - PAD * 2 - g * 2) / 3, ch = px(92);
       const cols = [CORAL, '#e0a200', CYAN];
       d.specs.forEach((s, i) => {
@@ -154,7 +200,8 @@
 
   const BAR = 104, FOOT = 66;
   function footer(ctx, d, T) {
-    const by = H - FOOT - BAR;
+    const H = SIZES[d.format], safe = d.format === 'story' ? SAFE.bottom : 0;
+    const by = H - FOOT - BAR - safe;
     ctx.fillStyle = grad(ctx, 0, W, T.bar); ctx.fillRect(0, by, W, BAR);
     ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff';
     ctx.font = `700 32px ${FONT}`; ctx.textAlign = 'right';
@@ -163,8 +210,8 @@
     ctx.textAlign = 'left'; ctx.font = `800 40px ${FONT}`;
     ctx.fillText(clip(ctx, d.cta, W - PAD * 2 - pw - 40), PAD, by + BAR / 2 + 2);
 
-    const fy = H - FOOT;
-    ctx.fillStyle = T.foot; ctx.fillRect(0, fy, W, FOOT);
+    const fy = H - FOOT - safe;
+    ctx.fillStyle = T.foot; ctx.fillRect(0, fy, W, FOOT + safe);
     ctx.font = `800 24px ${FONT}`; ctx.fillStyle = T.footText === '#ffffff' ? '#8fe6f0' : TEAL;
     ctx.fillText('VirtuBox', PAD, fy + FOOT / 2 + 1);
     const vw = ctx.measureText('VirtuBox ').width;
@@ -193,6 +240,7 @@
       ideal: str(b.ideal, 150),
       cta: str(b.cta, 44) || 'Book a free demo',
       crop: ok ? c : null,
+      format: b.format === 'story' ? 'story' : 'post',
     };
   }
 
@@ -212,11 +260,12 @@
     let img = opts.photo || null;
     if (img) d.crop = { x: 0, y: 0, w: 1, h: 1 };
     else if (data && data.image && data.image.id) img = await loadImage(`/api/thumb/${encodeURIComponent(data.image.id)}`);
+    const H = SIZES[d.format];
     const canvas = opts.canvas || document.createElement('canvas'); canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
-    const limit = H - BAR - FOOT - 26;
+    const limit = H - BAR - FOOT - (d.format === 'story' ? SAFE.bottom : 0) - 26;
     let k = 0.5;
-    for (let t = 1.2; t > 0.5; t -= 0.02) { if (draw(ctx, d, t, T, img) <= limit) { k = t; break; } }
+    for (let t = d.format === 'story' ? 1.9 : 1.2; t > 0.5; t -= 0.02) { if (draw(ctx, d, t, T, img) <= limit) { k = t; break; } }
     draw(ctx, d, k, T, img);
     footer(ctx, d, T);
     return canvas;
