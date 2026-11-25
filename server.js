@@ -5,6 +5,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { loadIndex } = require('./lib/retrieval');
 const { streamChat, chat, isRateLimit } = require('./lib/llm');
+const { generateInfographic, imageGenEnabled } = require('./lib/imagegen');
 const auth = require('./lib/auth');
 const store = require('./lib/chatStore');
 const { runIngest, INDEX_PATH } = require('./lib/ingest');
@@ -182,7 +183,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true, uptime: Math.round(pro
 
 app.use('/api', auth.identify);
 
-app.get('/api/me', (req, res) => res.json({ admin: req.isAdmin, index: indexInfo }));
+app.get('/api/me', (req, res) => res.json({ admin: req.isAdmin, index: indexInfo, imageGen: imageGenEnabled() }));
 app.get('/api/library', (req, res) => res.json(index.library()));
 
 // One-pager preview for banners, served from our own address so the browser may draw it into the image.
@@ -190,11 +191,41 @@ app.get('/api/library', (req, res) => res.json(index.library()));
 app.get('/api/thumb/:id', wrap(async (req, res) => {
   const id = req.params.id;
   if (!index.library().some((d) => d.source === 'drive' && driveId(d.url) === id)) return res.status(404).end();
-  const r = await fetch(`https://drive.google.com/thumbnail?id=${id}&sz=w1600`, { redirect: 'follow' });
+  const img = await fetchThumb(id, 1600);
+  if (!img) return res.status(502).end();
+  res.set({ 'Content-Type': img.mime, 'Cache-Control': 'public, max-age=86400, s-maxage=604800' });
+  res.send(img.data);
+}));
+
+async function fetchThumb(id, size) {
+  const r = await fetch(`https://drive.google.com/thumbnail?id=${id}&sz=w${size}`, { redirect: 'follow' });
   const type = r.headers.get('content-type') || '';
-  if (!r.ok || !type.startsWith('image/')) return res.status(502).end();
-  res.set({ 'Content-Type': type, 'Cache-Control': 'public, max-age=86400, s-maxage=604800' });
-  res.send(Buffer.from(await r.arrayBuffer()));
+  if (!r.ok || !type.startsWith('image/')) return null;
+  return { mime: type.split(';')[0], data: Buffer.from(await r.arrayBuffer()) };
+}
+
+// AI-designed version of a banner: the whole poster painted by an image model (see lib/imagegen.js).
+const aiLimit = rateLimit({ windowMs: 60_000, max: Number(process.env.MAX_IMAGE_REQUESTS_PER_MIN || 6), standardHeaders: true, legacyHeaders: false });
+app.post('/api/banner-image', aiLimit, wrap(async (req, res) => {
+  if (!imageGenEnabled()) return res.status(501).json({ error: 'AI image generation is not set up on this server.' });
+  const b = (req.body && req.body.banner) || {};
+  const str = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+  const banner = {
+    title: str(b.title, 60), tagline: str(b.tagline, 150), ideal: str(b.ideal, 150), cta: str(b.cta, 44),
+    format: b.format === 'story' ? 'story' : 'post',
+    features: (Array.isArray(b.features) ? b.features : []).slice(0, 6).map((f) => ({ title: str(f && f.title, 34), text: str(f && f.text, 90) })).filter((f) => f.title || f.text),
+    specs: (Array.isArray(b.specs) ? b.specs : []).slice(0, 9).map((x) => ({ label: str(x && x.label, 28), value: str(x && x.value, 40) })).filter((x) => x.label && x.value),
+  };
+  if (!banner.title) return res.status(400).json({ error: 'banner title is required' });
+  const id = b.image && b.image.id;
+  const product = id && index.library().some((d) => d.source === 'drive' && driveId(d.url) === id) ? await fetchThumb(id, 1200).catch(() => null) : null;
+  try {
+    const out = await generateInfographic(banner, product);
+    res.json({ image: `data:${out.mime};base64,${out.data}` });
+  } catch (err) {
+    console.error('[banner-image]', err.message);
+    res.status(502).json({ error: err.message });
+  }
 }));
 
 app.get('/api/chats', wrap(async (req, res) => res.json(await store.list(req.user))));

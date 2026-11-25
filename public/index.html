@@ -109,6 +109,7 @@ a{color:var(--accent2)}
 .banner{max-width:380px}
 .banner-themes{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;color:var(--muted)}
 .banner-themes button{border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12.5px;color:var(--text)}
+.ai-note{font-size:12px;color:var(--muted);margin-left:6px}
 .banner-themes button.on{border-color:var(--accent);color:var(--accent)}
 .banner-edit{display:flex;flex-direction:column;gap:10px;margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
 .banner-edit label{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--muted)}
@@ -242,7 +243,7 @@ async function api(path, opts = {}) {
 }
 
 async function boot() {
-  const me = await api('/api/me');
+  const me = await api('/api/me'); window.__imageGen = !!me.imageGen;
   state.admin = me.admin;
   $('#adminBtn').classList.toggle('hidden', !me.admin);
   await loadChats();
@@ -332,16 +333,20 @@ function addBot(text, sources, banner) {
 }
 
 // ───────── Banners ─────────
-async function showBanner(el, banner) {
+async function showBanner(el, banner, opts = {}) {
   const box = el.querySelector('.banner');
   const st = { data: JSON.parse(JSON.stringify(banner)), theme: 'light', photo: null };
   const caption = banner.caption || banner.tagline || '';
   const fileName = () => `VirtuBox - ${String(st.data.title || 'banner').replace(/[^\w\- ]+/g, '').trim() || 'banner'}.png`;
   const canvas = await renderBanner(st.data, st);
-  const redraw = () => renderBanner(st.data, { ...st, canvas });
+  const redraw = () => { st.useAi = false; syncAi(); return renderBanner(st.data, { ...st, canvas }); };
+  // AI design: the finished picture is drawn onto the same canvas, so Download and Share work for either version
+  const showAi = () => { st.useAi = true; canvas.width = st.ai.naturalWidth; canvas.height = st.ai.naturalHeight; canvas.getContext('2d').drawImage(st.ai, 0, 0); syncAi(); };
+  const syncAi = () => { const b = ui && ui.querySelector('[data-b="ai"]'); if (b) b.classList.toggle('on', !!st.useAi); };
+  let ui;
   box.innerHTML = '';
   box.appendChild(canvas);
-  const ui = document.createElement('div');
+  ui = document.createElement('div');
   ui.innerHTML = `
     <div class="banner-actions">
       <button data-b="share">Share on WhatsApp</button>
@@ -349,7 +354,8 @@ async function showBanner(el, banner) {
       <button data-b="edit" class="alt">✏️ Edit text</button>
       <button data-b="photo" class="alt">🖼 Change photo</button>
     </div>
-    <div class="banner-themes">Style: ${BANNER_THEMES.map((t) => `<button data-theme="${t.id}" class="${t.id === 'light' ? 'on' : ''}">${t.name}</button>`).join('')}</div>
+    ${window.__imageGen ? `<div class="banner-themes"><button data-b="ai" class="on">✨ AI design</button><span class="ai-note"></span></div>` : ''}
+    <div class="banner-themes">Template style: ${BANNER_THEMES.map((t) => `<button data-theme="${t.id}" class="${t.id === 'light' ? 'on' : ''}">${t.name}</button>`).join('')}</div>
     <input type="file" accept="image/*" class="hidden">
     <form class="banner-edit hidden">
       <label>Heading<input name="title" maxlength="60"></label>
@@ -387,6 +393,7 @@ async function showBanner(el, banner) {
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   };
   ui.onclick = async (e) => {
+        if (e.target.dataset.b === 'ai') { if (st.ai && !st.useAi) return showAi(); return makeAi(); }
     const th = e.target.dataset.theme;
     if (th) { st.theme = th; ui.querySelectorAll('[data-theme]').forEach((x) => x.classList.toggle('on', x === e.target)); return redraw(); }
     const b = e.target.dataset.b; if (!b) return;
@@ -404,6 +411,25 @@ async function showBanner(el, banner) {
     e.target.textContent = 'Image saved — attach it in WhatsApp';
     setTimeout(() => (e.target.textContent = 'Share on WhatsApp'), 4000);
   };
+  async function makeAi() {
+    const note = ui.querySelector('.ai-note'), btn = ui.querySelector('[data-b="ai"]');
+    if (!btn || st.busyAi) return;
+    st.busyAi = true; btn.disabled = true; note.textContent = 'Designing with AI… about 20–40 seconds';
+    try {
+      const r = await fetch('/api/banner-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ banner: st.data }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.image) throw new Error(j.error || 'AI design failed');
+      const img = await loadBannerImage(j.image);
+      if (!img) throw new Error('AI design could not be shown');
+      st.ai = img; showAi();
+      note.textContent = 'Check the spelling before sending. Tap again for a new version.';
+      btn.textContent = '✨ New AI version'; btn.onclick = null;
+      btn.dataset.again = '1';
+    } catch (err) { note.textContent = `${err.message}. The template design is shown instead.`; btn.classList.remove('on'); }
+    st.busyAi = false; btn.disabled = false;
+  }
+  if (window.__imageGen && opts.auto) makeAi();
+  else if (window.__imageGen) { const b = ui.querySelector('[data-b="ai"]'); b.classList.remove('on'); }
   if (nearBottom()) scrollEnd(false);
 }
 const SRC_LABEL = { drive: 'One-pager', local: 'Sales file', docs: 'Docs', website: 'Web' };
@@ -481,7 +507,7 @@ async function send(text) {
   if (raf) cancelAnimationFrame(raf);
   if (error && !full) { mdEl.innerHTML = `<div class="error-msg">⚠️ ${esc(error)}</div>`; }
   else finishBot(el, full + (error ? `\n\n> ⚠️ ${error}` : ''), sources);
-  if (banner) await showBanner(el, banner);
+  if (banner) await showBanner(el, banner, { auto: true });
   state.controller = null; setBusy(false);
   await loadChats();
   const c = state.chats.find((x) => x.id === state.current); if (c) $('#chatTitle').textContent = c.title;
