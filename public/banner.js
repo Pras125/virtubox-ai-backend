@@ -277,11 +277,11 @@
     ctx.fillStyle = '#1B5FC7'; ctx.fillRect(62, 4, 9, 9); ctx.fillStyle = CYAN; ctx.fillRect(74, 12, 7, 7); ctx.fillStyle = CORAL; ctx.fillRect(52, 12, 6, 6);
     ctx.restore();
   }
-  function cover(ctx, img, crop, x, y, w, h, r) {
+  function cover(ctx, img, crop, x, y, w, h, r, contain) {
     const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
     const c = crop || { x: 0, y: 0, w: 1, h: 1 };
     const sx = c.x * iw, sy = c.y * ih, sw = c.w * iw, sh = c.h * ih;
-    const s = Math.max(w / sw, h / sh), dw = sw * s, dh = sh * s;
+    const s = (contain ? Math.min : Math.max)(w / sw, h / sh), dw = sw * s, dh = sh * s;
     ctx.save(); rr(ctx, x, y, w, h, r); ctx.clip();
     ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, w, h);
     ctx.imageSmoothingQuality = 'high';
@@ -298,7 +298,7 @@
     ctx.fillStyle = '#e9eef8'; rr(ctx, kx + kw * 0.15, y + h * 0.7, kw * 0.7, h * 0.22, 12); ctx.fill();
   }
 
-  function drawEvent(ctx, d, k, photos) {
+  function drawEvent(ctx, d, k, photos, logo) {
     const story = d.format === 'story', H = SIZES[d.format], p = d.poster, px = (n) => Math.round(n * k);
     const safeB = story ? SAFE.bottom : 0, barH = 96;
     const fy = H - safeB - barH, limit = fy - 22;
@@ -315,16 +315,23 @@
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     let y = story ? SAFE.top + 70 : 38;
 
-    // logo plate
-    const lh = px(78);
-    ctx.font = `800 ${px(44)}px ${FONT}`;
-    const wv = ctx.measureText('Virtu').width, wb = ctx.measureText('Box').width, pw = px(16) + lh * 0.9 + px(10) + wv + wb + px(24);
-    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 5; ctx.fillStyle = '#ffffff'; rr(ctx, PAD, y, pw, lh, lh / 2); ctx.fill(); ctx.restore();
-    logoMark(ctx, PAD + px(16), y + lh * 0.07, lh * 0.86);
-    ctx.font = `800 ${px(44)}px ${FONT}`;
-    ctx.fillStyle = '#1B5FC7'; ctx.fillText('Virtu', PAD + px(16) + lh * 0.9 + px(10), y + lh * 0.67);
-    ctx.fillStyle = '#F4A81F'; ctx.fillText('Box', PAD + px(16) + lh * 0.9 + px(10) + wv, y + lh * 0.67);
-    y += lh + px(30);
+    // logo plate: the real VirtuBox logo (public/logo.png) on a white rounded plate
+    let lh;
+    if (logo) {
+      const ih = px(story ? 128 : 112), iw = ih * (logo.naturalWidth / logo.naturalHeight), padL = px(16);
+      lh = ih + padL * 2;
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 5; ctx.fillStyle = '#ffffff'; rr(ctx, PAD, y, iw + padL * 2, lh, px(28)); ctx.fill(); ctx.restore();
+      ctx.imageSmoothingQuality = 'high'; ctx.drawImage(logo, PAD + padL, y + padL, iw, ih);
+    } else {
+      lh = px(78);
+      ctx.font = `800 ${px(44)}px ${FONT}`;
+      const wv = ctx.measureText('Virtu').width, wb = ctx.measureText('Box').width, pw = px(16) + lh * 0.9 + px(10) + wv + wb + px(24);
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 5; ctx.fillStyle = '#ffffff'; rr(ctx, PAD, y, pw, lh, lh / 2); ctx.fill(); ctx.restore();
+      logoMark(ctx, PAD + px(16), y + lh * 0.07, lh * 0.86);
+      ctx.fillStyle = '#1B5FC7'; ctx.fillText('Virtu', PAD + px(16) + lh * 0.9 + px(10), y + lh * 0.67);
+      ctx.fillStyle = '#10AADA'; ctx.fillText('Box', PAD + px(16) + lh * 0.9 + px(10) + wv, y + lh * 0.67);
+    }
+    y += lh + px(28);
 
     // headline + emphasis + swoosh
     const l1 = p.headline || d.title, l2 = p.emphasis || '';
@@ -385,17 +392,18 @@
     const list = photos.slice(0, 2);
     if (list.length === 1 || !list.length) {
       // one photo (or the stand-in): photo on the left, pitch and pills stacked in a right column, as in the event banners
-      const pwid = Math.round(innerW * 0.44), cx0 = PAD + pwid + 28, cwid = W - PAD - cx0;
+      const tall = list.length && list[0].crop && list[0].crop.w * 0.71 / list[0].crop.h < 0.6; // crop aspect on an A4 page
+      const pwid = Math.round(innerW * (tall ? 0.36 : 0.44)), cx0 = PAD + pwid + 28, cwid = W - PAD - cx0;
       let ry = y; const h1 = drawPitch(cx0, cwid, ry); ry += h1 + px(26);
       const h2 = drawPills(cx0, cwid, 1, ry); ry += h2;
       const ph = Math.max(ry - y - px(10), px(story ? 420 : 320));
       frame(PAD, y, pwid, ph);
-      if (list.length) cover(ctx, list[0].img, list[0].crop, PAD + 10, y + 10, pwid - 20, ph - 20, 16); else kioskArt(ctx, PAD + 10, y + 10, pwid - 20, ph - 20);
+      if (list.length) cover(ctx, list[0].img, list[0].crop, PAD + 10, y + 10, pwid - 20, ph - 20, 16, true); else kioskArt(ctx, PAD + 10, y + 10, pwid - 20, ph - 20);
       sparks(PAD, y);
       y += ph + px(36);
     } else {
       const ph = px(story ? 400 : 300), fw = (innerW - 30) / 2;
-      list.forEach((it, i) => { const x = PAD + i * (fw + 30); frame(x, y, fw, ph); cover(ctx, it.img, it.crop, x + 10, y + 10, fw - 20, ph - 20, 16); });
+      list.forEach((it, i) => { const x = PAD + i * (fw + 30); frame(x, y, fw, ph); cover(ctx, it.img, it.crop, x + 10, y + 10, fw - 20, ph - 20, 16, true); });
       sparks(PAD, y);
       y += ph + px(36);
       y += drawPitch(PAD, innerW, y) + px(28);
@@ -492,6 +500,9 @@
     };
   }
 
+  let logoPromise = null;
+  const loadLogo = () => logoPromise || (logoPromise = loadImage('/logo.png'));
+
   function loadImage(src) {
     return new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
   }
@@ -510,13 +521,14 @@
       if (opts.photo) items = [{ img: opts.photo, crop: null }];
       else if (d.photos.length) items = (await Promise.all(d.photos.map(async (x) => ({ img: await loadImage(`/api/thumb/${encodeURIComponent(x.id)}`), crop: x.crop && [x.crop.x, x.crop.y, x.crop.w, x.crop.h].every((n) => typeof n === 'number') ? x.crop : null })))).filter((x) => x.img && x.crop);
       else if (data && data.image && data.image.id) { const im = await loadImage(`/api/thumb/${encodeURIComponent(data.image.id)}`); if (im && d.crop) items = [{ img: im, crop: d.crop }]; }
+      const logo = await loadLogo();
       const H2 = SIZES[d.format], cv = opts.canvas || document.createElement('canvas'); cv.width = W; cv.height = H2;
       const cx = cv.getContext('2d');
       try { await Promise.all(['italic 800 80px Inter', '600 26px Inter', '700 22px Inter'].map((f) => document.fonts.load(f))); } catch { /* system font */ }
       const lim = H2 - (d.format === 'story' ? SAFE.bottom : 0) - 96 - 22;
       let k2 = 0.5;
-      for (let t = 1.2; t > 0.5; t -= 0.02) { if (drawEvent(cx, d, t, items) <= lim) { k2 = t; break; } }
-      drawEvent(cx, d, k2, items);
+      for (let t = 1.2; t > 0.5; t -= 0.02) { if (drawEvent(cx, d, t, items, logo) <= lim) { k2 = t; break; } }
+      drawEvent(cx, d, k2, items, logo);
       return cv;
     }
     let img = opts.photo || null;
