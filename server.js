@@ -105,6 +105,15 @@ const BANNER_WORD = /\b(banners?|posters?|flyers?|infographics?|creatives?|(what
 const STORY_WORD = /\b(infographics?|(whatsapp|wa|insta(gram)?)\s+(status|stor(y|ies))|stor(y|ies)|9:16)\b/i; // tall 9:16 layout
 const BANNER_ASK = /\b(create|make|generate|design|build|prepare|draft|give|send|need|want|get|change|update|edit|redo|shorten|add|remove|bana\w*|chahiye)\b/i;
 const isBannerRequest = (m) => BANNER_WORD.test(m) && BANNER_ASK.test(m) && !/\bflash banners?\b/i.test(m);
+// What a banner request is about: its own words minus the banner / filler words, or else the topic of the last few asks in the chat.
+const FILLER = /\b(banners?|posters?|flyers?|infographics?|creatives?|whatsapp|wa|status|stor(y|ies)|insta(gram)?|create|make|generate|design|build|prepare|draft|give|send|need|want|get|change|update|edit|redo|i|said|a|an|the|for|me|my|to|of|please|with|all|its|it|details?|good|nice|proper|again|that|this|on|in|and)\b/gi;
+const topicOf = (m) => String(m || '').replace(FILLER, ' ').replace(/\s+/g, ' ').trim();
+const bannerTopic = (message, convo) => {
+  const own = topicOf(message);
+  if (own.split(' ').filter(Boolean).length >= 2) return own;
+  const last = [...convo.messages].reverse().map((m) => (m.role === 'user' ? topicOf(m.content) : '')).find((t) => t.split(' ').filter(Boolean).length >= 2); // newest ask that names something
+  return `${own} ${last || ''}`.trim() || message;
+};
 const BANNER_SYSTEM = `You write the copy for a VirtuBox sales banner or infographic: one portrait image a salesperson posts as a WhatsApp status or sends to a client.
 For an infographic or story, give 5 to 6 features and fill specs and ideal whenever the knowledge allows, so the image is rich with real content.
 Return ONLY a JSON object, no markdown and no commentary, in exactly this shape:
@@ -165,7 +174,9 @@ function parseBanner(raw, story) {
     poster: cleanPoster(j.poster),
   };
   banner.format = story ? 'story' : 'post';
-  if (!banner.title || !banner.features.length) throw new Error('The AI returned an incomplete banner. Please try again.');
+  if (!banner.title) banner.title = [banner.poster.headline, banner.poster.emphasis].filter(Boolean).join(' ').slice(0, 60);
+  if (!banner.features.length) banner.features = banner.poster.highlights.map((t) => ({ title: t, text: '' })).slice(0, 6);
+  if (!banner.title || !banner.features.length) throw new Error('INCOMPLETE');
   return banner;
 }
 
@@ -193,12 +204,19 @@ function bannerPhotos(sources, prev) {
 
 async function makeBanner(message, chunks, history, story) {
   const excerpts = chunks.length ? chunks.map((c, i) => `[${i + 1}] ${labelFor(c)}\n${c.text}`).join('\n\n---\n\n') : '(no matching excerpts found)';
-  const raw = await chat([
-    { role: 'system', content: `${BANNER_SYSTEM}\n\n<baseline>\n${BASELINE}\n</baseline>\n\n<knowledge_excerpts>\n${excerpts}\n</knowledge_excerpts>` },
-    ...history,
-    { role: 'user', content: message },
-  ], { temperature: 0.3, max_tokens: 3500 });
-  try { return parseBanner(raw, story); } catch (e) { console.error('[banner] unreadable reply:', String(raw).slice(0, 400), '…', String(raw).slice(-200)); throw e; }
+  const system = `${BANNER_SYSTEM}\n\n<baseline>\n${BASELINE}\n</baseline>\n\n<knowledge_excerpts>\n${excerpts}\n</knowledge_excerpts>`;
+  let lastErr;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await chat([
+      { role: 'system', content: system },
+      ...history,
+      { role: 'user', content: attempt ? `${message}\n\n(Reply with the JSON object only, filled in completely: title, tagline, at least 4 features and the poster section.)` : message },
+    ], { temperature: attempt ? 0.2 : 0.3, max_tokens: 3500 });
+    try { return parseBanner(raw, story); } catch (e) { lastErr = e; console.error('[banner] attempt', attempt + 1, e.message, String(raw).slice(0, 300)); }
+  }
+  throw new Error(lastErr && lastErr.message === 'INCOMPLETE'
+    ? 'I could not tell which product or solution this banner is for. Please name it, for example: "create an infographic for the Print Kiosk".'
+    : (lastErr && lastErr.message) || 'The AI did not return banner content. Please try again.');
 }
 
 function bannerText(b) {
@@ -295,13 +313,16 @@ app.post('/api/chat', wrap(async (req, res) => {
 
   // Retrieval: include the previous user turn so follow-ups ("what about pricing?") keep context
   const prevUser = [...convo.messages].reverse().find((m) => m.role === 'user');
-  const chunks = index.search(`${message} ${prevUser ? prevUser.content : ''}`, 7);
+  // a banner follow-up like "i said i need the banner" has no product in it, so look back over the last few asks
+  const chunks = index.search(isBannerRequest(message) ? bannerTopic(message, convo) : `${message} ${prevUser ? prevUser.content : ''}`, 7);
   const sources = dedupeSources(chunks);
   send({ sources });
 
   // earlier banners are replayed as their JSON so "change the headline" edits the same banner
-  const history = convo.messages.slice(-12).map((m) => ({ role: m.role, content: m.banner ? JSON.stringify(m.banner) : m.content }));
   const wantsBanner = isBannerRequest(message);
+  const history = convo.messages.slice(-12)
+    .filter((m) => !wantsBanner || m.role === 'user' || m.banner) // long plain answers only confuse the banner writer
+    .map((m) => ({ role: m.role, content: m.banner ? JSON.stringify(m.banner) : m.content }));
   const messages = [{ role: 'system', content: buildSystemPrompt(chunks, style) }, ...history, { role: 'user', content: message }];
 
   let aborted = false;
@@ -316,7 +337,8 @@ app.post('/api/chat', wrap(async (req, res) => {
       const story = STORY_WORD.test(message) || (!BANNER_WORD.test(message) ? false : /\b(post|banner|poster|flyer)\b/i.test(message) ? false : !!(prevBanner && prevBanner.banner.format === 'story'));
       const banner = await makeBanner(message, [...chunks, ...sheet], history, story);
       // match the photo on this request alone, so an earlier turn's product does not leak in
-      const own = dedupeSources(index.search(message, 7));
+      let own = dedupeSources(index.search(bannerTopic(message, convo), 7));
+      if (!own.some((x) => x.source === 'drive')) own = sources; // a follow-up with no product in it: use what the chat was about
       const image = bannerImage(own, prevBanner && prevBanner.banner.image);
       if (image) banner.image = image;
       banner.photos = bannerPhotos(own, prevBanner && prevBanner.banner.photos);
