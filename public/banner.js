@@ -229,7 +229,7 @@
   const NAVY = '#0A2A8C', DEEP = '#0A1F6B', ROYAL = '#1243C6', SUN = '#FFD21F';
   const ICON_RULES = [
     [/announce|broadcast|campaign|launch/, 'megaphone'], [/schedul|timeline|calendar|agenda/, 'calendar'],
-    [/offer|promo|discount|brand|coupon|deal/, 'tag'], [/video|\bads?\b|play|stream|live|feed|film/, 'play'],
+    [/offer|promo|discount|brand|coupon|deal/, 'tag'], [/face|detect|recogni/, 'users'], [/video|\bads?\b|play|stream|live (feed|video|stream)|feed|film/, 'play'],
     [/image|photo|gallery|highlight|selfie|picture/, 'image'], [/visib|boost|star|premium|best/, 'star'],
     [/qr|scan|code/, 'qr'], [/upload|document|file|form/, 'upload'], [/print/, 'printer'],
     [/cost|price|afford|saving|revenue|roi|budget/, 'tag'], [/pay|upi|cash|secure|safe|privacy|trust/, 'shield'], [/report|analytic|data|insight|track|chart|stat/, 'chart'],
