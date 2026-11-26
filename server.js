@@ -108,7 +108,9 @@ const isBannerRequest = (m) => BANNER_WORD.test(m) && BANNER_ASK.test(m) && !/\b
 const BANNER_SYSTEM = `You write the copy for a VirtuBox sales banner or infographic: one portrait image a salesperson posts as a WhatsApp status or sends to a client.
 For an infographic or story, give 5 to 6 features and fill specs and ideal whenever the knowledge allows, so the image is rich with real content.
 Return ONLY a JSON object, no markdown and no commentary, in exactly this shape:
-{"title":"","tagline":"","features":[{"title":"","text":""}],"specs":[{"label":"","value":""}],"ideal":"","cta":"","caption":""}
+{"title":"","tagline":"","features":[{"title":"","text":""}],"specs":[{"label":"","value":""}],"ideal":"","cta":"","caption":"","poster":{"headline":"","emphasis":"","motto":["","",""],"pitch":["",""],"highlights":["","","",""],"idealFor":["","","","",""],"benefits":["","",""],"closing":"","contacts":[{"name":"","phone":""}]}}
+
+The salesperson may describe a NEED (an event, a store, a hospital, a government office) instead of naming a product. Then choose the VirtuBox solution or solutions the knowledge says fit that need, and name them in title.
 
 - title: the product or solution name, at most 4 words. Do not prefix it with "VirtuBox".
 - tagline: one benefit-led sentence for the client, at most 16 words.
@@ -119,9 +121,31 @@ Return ONLY a JSON object, no markdown and no commentary, in exactly this shape:
 - cta: at most 5 words, e.g. "Book a free demo".
 - If the salesperson typed their own wording, details or offer in the request, use it as they wrote it.
 - caption: a 2-3 sentence WhatsApp message to send with the image.
+- poster: copy for the AI-designed poster, same accuracy rules.
+  - headline: at most 5 words, the hook for the need the salesperson described, e.g. "Make Your Event More". emphasis: at most 4 words that finish the hook in bold, e.g. "Engaging & Informative!".
+  - motto: exactly 3 single words, e.g. "Inform","Engage","Inspire".
+  - pitch: 2 short lines. pitch[0] at most 5 words, pitch[1] at most 7 words, the thing to showcase, e.g. "The Perfect Platform to" / "Showcase Your Information & Content".
+  - highlights: 4 items, each at most 4 words, what the solution does for the client.
+  - idealFor: up to 5 items, each at most 3 words, ONLY uses or places the knowledge names for these products. Fewer is fine; [] if none.
+  - benefits: 3 items, each at most 3 words, e.g. "Easy Setup", "Dedicated Support".
+  - closing: at most 8 words, a closing line.
+  - contacts: ONLY names and phone numbers the salesperson typed in the request. Otherwise [].
 
 ACCURACY: every factual claim (features, specs, numbers, client names) must come from the knowledge below. Never invent prices, specs, numbers, certifications or client names, and never include a price unless the salesperson typed it in their request. If the knowledge says little about this product, keep the points general and true to what is there. An excerpt marked [not transcribed] gives a file name only: do not guess its contents.
 If the salesperson asks to change an earlier banner, apply the change and return the full JSON again. Write in the language the salesperson used.`;
+
+const posterStr = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+const posterList = (v, count, n) => (Array.isArray(v) ? v : []).map((x) => posterStr(x, n)).filter(Boolean).slice(0, count);
+function cleanPoster(p) {
+  p = p && typeof p === 'object' ? p : {};
+  return {
+    headline: posterStr(p.headline, 40), emphasis: posterStr(p.emphasis, 36),
+    motto: posterList(p.motto, 3, 16), pitch: posterList(p.pitch, 2, 48),
+    highlights: posterList(p.highlights, 4, 30), idealFor: posterList(p.idealFor, 5, 26), benefits: posterList(p.benefits, 3, 24),
+    closing: posterStr(p.closing, 70),
+    contacts: (Array.isArray(p.contacts) ? p.contacts : []).map((c) => ({ name: posterStr(c && c.name, 30), phone: posterStr(c && c.phone, 20) })).filter((c) => c.phone).slice(0, 3),
+  };
+}
 
 function parseBanner(raw, story) {
   const s = String(raw || '');
@@ -138,6 +162,7 @@ function parseBanner(raw, story) {
     ideal: str(j.ideal, 150),
     cta: str(j.cta, 44) || 'Book a free demo',
     caption: str(j.caption, 600),
+    poster: cleanPoster(j.poster),
   };
   banner.format = story ? 'story' : 'post';
   if (!banner.title || !banner.features.length) throw new Error('The AI returned an incomplete banner. Please try again.');
@@ -152,6 +177,11 @@ function bannerImage(sources, prev) {
   if (!s) return prev || null; // an edit like "make the headline shorter" keeps the earlier photo
   const id = driveId(s.url);
   return { id, crop: BANNER_CROPS[id] || null, title: s.title };
+}
+// Up to three matching one-pagers, shown to the AI image model as product photos.
+function bannerPhotos(sources, prev) {
+  const ids = [...new Set(sources.filter((x) => x.source === 'drive' && driveId(x.url)).map((x) => driveId(x.url)))].slice(0, 3);
+  return ids.length ? ids : prev || [];
 }
 
 async function makeBanner(message, chunks, history, story) {
@@ -213,12 +243,15 @@ app.post('/api/banner-image', aiLimit, wrap(async (req, res) => {
   const banner = {
     title: str(b.title, 60), tagline: str(b.tagline, 150), ideal: str(b.ideal, 150), cta: str(b.cta, 44),
     format: b.format === 'story' ? 'story' : 'post',
+    poster: cleanPoster(b.poster),
+    look: b.look === 'light' ? 'light' : 'blue',
     features: (Array.isArray(b.features) ? b.features : []).slice(0, 6).map((f) => ({ title: str(f && f.title, 34), text: str(f && f.text, 90) })).filter((f) => f.title || f.text),
     specs: (Array.isArray(b.specs) ? b.specs : []).slice(0, 9).map((x) => ({ label: str(x && x.label, 28), value: str(x && x.value, 40) })).filter((x) => x.label && x.value),
   };
   if (!banner.title) return res.status(400).json({ error: 'banner title is required' });
-  const id = b.image && b.image.id;
-  const product = id && index.library().some((d) => d.source === 'drive' && driveId(d.url) === id) ? await fetchThumb(id, 1200).catch(() => null) : null;
+  const wanted = [...new Set([...(Array.isArray(b.photos) ? b.photos : []), b.image && b.image.id].filter((x) => typeof x === 'string'))].slice(0, 3);
+  const ok = wanted.filter((id) => index.library().some((d) => d.source === 'drive' && driveId(d.url) === id));
+  const product = (await Promise.all(ok.map((id) => fetchThumb(id, 1000).catch(() => null)))).filter(Boolean);
   try {
     const out = await generateInfographic(banner, product);
     res.json({ image: `data:${out.mime};base64,${out.data}` });
@@ -279,6 +312,7 @@ app.post('/api/chat', wrap(async (req, res) => {
       const own = dedupeSources(index.search(message, 7));
       const image = bannerImage(own, prevBanner && prevBanner.banner.image);
       if (image) banner.image = image;
+      banner.photos = bannerPhotos(own, prevBanner && prevBanner.banner.photos);
       const text = bannerText(banner);
       if (!aborted) { send({ banner }); send({ delta: text }); }
       await store.append(req.user, convo.id, { role: 'user', content: message }, { role: 'assistant', content: text, sources, banner });

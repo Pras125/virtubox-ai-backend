@@ -354,7 +354,7 @@ async function showBanner(el, banner, opts = {}) {
       <button data-b="edit" class="alt">✏️ Edit text</button>
       <button data-b="photo" class="alt">🖼 Change photo</button>
     </div>
-    ${window.__imageGen ? `<div class="banner-themes"><button data-b="ai" class="on">✨ AI design</button><span class="ai-note"></span></div>` : ''}
+    ${window.__imageGen ? `<div class="banner-themes"><button data-b="ai" class="on">✨ AI design</button><button data-aistyle="blue" class="on">Bold blue</button><button data-aistyle="light">Light</button><span class="ai-note"></span></div>` : ''}
     <div class="banner-themes">Template style: ${BANNER_THEMES.map((t) => `<button data-theme="${t.id}" class="${t.id === 'light' ? 'on' : ''}">${t.name}</button>`).join('')}</div>
     <input type="file" accept="image/*" class="hidden">
     <form class="banner-edit hidden">
@@ -393,7 +393,8 @@ async function showBanner(el, banner, opts = {}) {
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   };
   ui.onclick = async (e) => {
-        if (e.target.dataset.b === 'ai') { if (st.ai && !st.useAi) return showAi(); return makeAi(); }
+        if (e.target.dataset.aistyle) { st.look = e.target.dataset.aistyle; ui.querySelectorAll('[data-aistyle]').forEach((x) => x.classList.toggle('on', x === e.target)); st.ai = null; return makeAi(); }
+    if (e.target.dataset.b === 'ai') { if (st.ai && !st.useAi) return showAi(); return makeAi(); }
     const th = e.target.dataset.theme;
     if (th) { st.theme = th; ui.querySelectorAll('[data-theme]').forEach((x) => x.classList.toggle('on', x === e.target)); return redraw(); }
     const b = e.target.dataset.b; if (!b) return;
@@ -414,9 +415,9 @@ async function showBanner(el, banner, opts = {}) {
   async function makeAi() {
     const note = ui.querySelector('.ai-note'), btn = ui.querySelector('[data-b="ai"]');
     if (!btn || st.busyAi) return;
-    st.busyAi = true; btn.disabled = true; note.textContent = 'Designing with AI… about 20–40 seconds';
+    st.busyAi = true; btn.disabled = true; note.textContent = 'Designing with AI… about 30 seconds';
     try {
-      const r = await fetch('/api/banner-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ banner: st.data }) });
+      const r = await fetch('/api/banner-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ banner: { ...st.data, look: st.look || 'blue' } }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.image) throw new Error(j.error || 'AI design failed');
       const img = await loadBannerImage(j.image);
