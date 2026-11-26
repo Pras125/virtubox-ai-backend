@@ -446,8 +446,7 @@
     // footer: dark bar with contacts (the area under it is WhatsApp's own bar in a story)
     ctx.fillStyle = DEEP; ctx.fillRect(0, fy, W, H - fy);
     ctx.fillStyle = SUN; ctx.fillRect(0, fy, W, 4);
-    const contacts = p.contacts.length ? p.contacts.map((c) => ({ icon: 'phone', text: [c.name, c.phone].filter(Boolean).join('  ') }))
-      : [{ icon: 'phone', text: CONTACT.phone }, { icon: 'mail', text: CONTACT.email }];
+    const contacts = [{ icon: 'phone', text: CONTACT.phone }, { icon: 'mail', text: CONTACT.email }]; // always the company contacts
     const cw2 = innerW / contacts.length;
     contacts.forEach((c, i) => {
       const x = PAD + cw2 * i;

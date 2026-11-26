@@ -108,7 +108,7 @@ const isBannerRequest = (m) => BANNER_WORD.test(m) && BANNER_ASK.test(m) && !/\b
 const BANNER_SYSTEM = `You write the copy for a VirtuBox sales banner or infographic: one portrait image a salesperson posts as a WhatsApp status or sends to a client.
 For an infographic or story, give 5 to 6 features and fill specs and ideal whenever the knowledge allows, so the image is rich with real content.
 Return ONLY a JSON object, no markdown and no commentary, in exactly this shape:
-{"title":"","tagline":"","features":[{"title":"","text":""}],"specs":[{"label":"","value":""}],"ideal":"","cta":"","caption":"","poster":{"headline":"","emphasis":"","motto":["","",""],"pitch":["",""],"highlights":["","","",""],"idealFor":["","","","",""],"benefits":["","",""],"closing":"","contacts":[{"name":"","phone":""}]}}
+{"title":"","tagline":"","features":[{"title":"","text":""}],"specs":[{"label":"","value":""}],"ideal":"","cta":"","caption":"","poster":{"headline":"","emphasis":"","motto":["","",""],"pitch":["",""],"highlights":["","","",""],"idealFor":["","","","",""],"benefits":["","",""],"closing":""}}
 
 The salesperson may describe a NEED (an event, a store, a hospital, a government office) instead of naming a product. Then choose the VirtuBox solution or solutions the knowledge says fit that need, and name them in title.
 
@@ -129,7 +129,7 @@ The salesperson may describe a NEED (an event, a store, a hospital, a government
   - idealFor: up to 5 items, each at most 3 words, ONLY uses or places the knowledge names for these products. Fewer is fine; [] if none.
   - benefits: 3 items, each at most 3 words, e.g. "Easy Setup", "Dedicated Support".
   - closing: at most 8 words, a closing line.
-  - contacts: ONLY names and phone numbers the salesperson typed in the request. Otherwise [].
+  - Do not put phone numbers or names of people in the poster; the contact bar is added automatically.
 
 ACCURACY: every factual claim (features, specs, numbers, client names) must come from the knowledge below. Never invent prices, specs, numbers, certifications or client names, and never include a price unless the salesperson typed it in their request. If the knowledge says little about this product, keep the points general and true to what is there. An excerpt marked [not transcribed] gives a file name only: do not guess its contents.
 If the salesperson asks to change an earlier banner, apply the change and return the full JSON again. Write in the language the salesperson used.`;
