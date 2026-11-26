@@ -415,12 +415,12 @@ async function showBanner(el, banner, opts = {}) {
   async function makeAi() {
     const note = ui.querySelector('.ai-note'), btn = ui.querySelector('[data-b="ai"]');
     if (!btn || st.busyAi) return;
-    st.busyAi = true; btn.disabled = true; note.textContent = 'Designing with AI… about 30 seconds';
+    st.busyAi = true; btn.disabled = true; note.textContent = 'Claude is designing your poster… about a minute';
     try {
       const r = await fetch('/api/banner-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ banner: { ...st.data, look: st.look || 'blue' } }) });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.image) throw new Error(j.error || 'AI design failed');
-      const img = await loadBannerImage(j.image);
+      if (!r.ok || !j.svg) throw new Error(j.error || 'AI design failed');
+      const img = await loadBannerImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(j.svg));
       if (!img) throw new Error('AI design could not be shown');
       st.ai = img; showAi();
       note.textContent = 'Check the spelling before sending. Tap again for a new version.';

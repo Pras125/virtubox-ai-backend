@@ -5,7 +5,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { loadIndex } = require('./lib/retrieval');
 const { streamChat, chat, isRateLimit } = require('./lib/llm');
-const { generateInfographic, imageGenEnabled } = require('./lib/imagegen');
+const { designPoster, designEnabled } = require('./lib/poster');
 const auth = require('./lib/auth');
 const store = require('./lib/chatStore');
 const { runIngest, INDEX_PATH } = require('./lib/ingest');
@@ -213,7 +213,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true, uptime: Math.round(pro
 
 app.use('/api', auth.identify);
 
-app.get('/api/me', (req, res) => res.json({ admin: req.isAdmin, index: indexInfo, imageGen: imageGenEnabled() }));
+app.get('/api/me', (req, res) => res.json({ admin: req.isAdmin, index: indexInfo, imageGen: designEnabled() }));
 app.get('/api/library', (req, res) => res.json(index.library()));
 
 // One-pager preview for banners, served from our own address so the browser may draw it into the image.
@@ -234,10 +234,10 @@ async function fetchThumb(id, size) {
   return { mime: type.split(';')[0], data: Buffer.from(await r.arrayBuffer()) };
 }
 
-// AI-designed version of a banner: the whole poster painted by an image model (see lib/imagegen.js).
-const aiLimit = rateLimit({ windowMs: 60_000, max: Number(process.env.MAX_IMAGE_REQUESTS_PER_MIN || 6), standardHeaders: true, legacyHeaders: false });
+// AI-designed version of a banner: Claude designs the whole poster as an SVG (see lib/poster.js); the browser turns it into a PNG.
+const aiLimit = rateLimit({ windowMs: 60_000, max: Number(process.env.MAX_DESIGN_REQUESTS_PER_MIN || 6), standardHeaders: true, legacyHeaders: false });
 app.post('/api/banner-image', aiLimit, wrap(async (req, res) => {
-  if (!imageGenEnabled()) return res.status(501).json({ error: 'AI image generation is not set up on this server.' });
+  if (!designEnabled()) return res.status(501).json({ error: 'AI design is not set up on this server (ANTHROPIC_API_KEY).' });
   const b = (req.body && req.body.banner) || {};
   const str = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
   const banner = {
@@ -251,10 +251,10 @@ app.post('/api/banner-image', aiLimit, wrap(async (req, res) => {
   if (!banner.title) return res.status(400).json({ error: 'banner title is required' });
   const wanted = [...new Set([...(Array.isArray(b.photos) ? b.photos : []), b.image && b.image.id].filter((x) => typeof x === 'string'))].slice(0, 3);
   const ok = wanted.filter((id) => index.library().some((d) => d.source === 'drive' && driveId(d.url) === id));
-  const product = (await Promise.all(ok.map((id) => fetchThumb(id, 1000).catch(() => null)))).filter(Boolean);
+  const product = (await Promise.all(ok.map(async (id) => { const t = await fetchThumb(id, 1000).catch(() => null); return t && { ...t, crop: BANNER_CROPS[id] || null }; }))).filter(Boolean);
   try {
-    const out = await generateInfographic(banner, product);
-    res.json({ image: `data:${out.mime};base64,${out.data}` });
+    const out = await designPoster(banner, product);
+    res.json({ svg: out.svg });
   } catch (err) {
     console.error('[banner-image]', err.message);
     res.status(502).json({ error: err.message });
