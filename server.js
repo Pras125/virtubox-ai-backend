@@ -5,7 +5,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { loadIndex } = require('./lib/retrieval');
 const { streamChat, chat, isRateLimit } = require('./lib/llm');
-const { designPoster, designEnabled } = require('./lib/poster');
+const { designPoster, designEnabled, designUiEnabled } = require('./lib/poster');
 const auth = require('./lib/auth');
 const store = require('./lib/chatStore');
 const { runIngest, INDEX_PATH } = require('./lib/ingest');
@@ -134,7 +134,7 @@ The salesperson may describe a NEED (an event, a store, a hospital, a government
 ACCURACY: every factual claim (features, specs, numbers, client names) must come from the knowledge below. Never invent prices, specs, numbers, certifications or client names, and never include a price unless the salesperson typed it in their request. If the knowledge says little about this product, keep the points general and true to what is there. An excerpt marked [not transcribed] gives a file name only: do not guess its contents.
 If the salesperson asks to change an earlier banner, apply the change and return the full JSON again. Write in the language the salesperson used.`;
 
-const posterStr = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+const posterStr = (v, n) => String(v == null ? '' : v).replace(/[\u2010\u2011\u2012]/g, '-').replace(/\s+/g, ' ').trim().slice(0, n);
 const posterList = (v, count, n) => (Array.isArray(v) ? v : []).map((x) => posterStr(x, n)).filter(Boolean).slice(0, count);
 function cleanPoster(p) {
   p = p && typeof p === 'object' ? p : {};
@@ -180,8 +180,15 @@ function bannerImage(sources, prev) {
 }
 // Up to three matching one-pagers, shown to the AI image model as product photos.
 function bannerPhotos(sources, prev) {
-  const ids = [...new Set(sources.filter((x) => x.source === 'drive' && driveId(x.url)).map((x) => driveId(x.url)))].slice(0, 3);
-  return ids.length ? ids : prev || [];
+  const seen = new Set(), out = [];
+  for (const x of sources) { // one photo per product: "Print Kiosk (Features)" and "Print Kiosk (Specifications)" are the same kiosk
+    if (x.source !== 'drive' || !driveId(x.url)) continue;
+    const base = String(x.title || '').replace(/\s*\(.*\)\s*$/, '').trim().toLowerCase();
+    if (seen.has(base)) continue;
+    seen.add(base); out.push({ id: driveId(x.url), crop: BANNER_CROPS[driveId(x.url)] || null });
+  }
+  out.sort((x, y) => Number(!!y.crop) - Number(!!x.crop)); // one-pagers with a known photo area first
+  return out.length ? out.slice(0, 2) : prev || [];
 }
 
 async function makeBanner(message, chunks, history, story) {
@@ -190,8 +197,8 @@ async function makeBanner(message, chunks, history, story) {
     { role: 'system', content: `${BANNER_SYSTEM}\n\n<baseline>\n${BASELINE}\n</baseline>\n\n<knowledge_excerpts>\n${excerpts}\n</knowledge_excerpts>` },
     ...history,
     { role: 'user', content: message },
-  ], { temperature: 0.3, max_tokens: 1500 });
-  return parseBanner(raw, story);
+  ], { temperature: 0.3, max_tokens: 3500 });
+  try { return parseBanner(raw, story); } catch (e) { console.error('[banner] unreadable reply:', String(raw).slice(0, 400), '…', String(raw).slice(-200)); throw e; }
 }
 
 function bannerText(b) {
@@ -213,7 +220,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true, uptime: Math.round(pro
 
 app.use('/api', auth.identify);
 
-app.get('/api/me', (req, res) => res.json({ admin: req.isAdmin, index: indexInfo, imageGen: designEnabled() }));
+app.get('/api/me', (req, res) => res.json({ admin: req.isAdmin, index: indexInfo, imageGen: designUiEnabled() }));
 app.get('/api/library', (req, res) => res.json(index.library()));
 
 // One-pager preview for banners, served from our own address so the browser may draw it into the image.
@@ -249,7 +256,7 @@ app.post('/api/banner-image', aiLimit, wrap(async (req, res) => {
     specs: (Array.isArray(b.specs) ? b.specs : []).slice(0, 9).map((x) => ({ label: str(x && x.label, 28), value: str(x && x.value, 40) })).filter((x) => x.label && x.value),
   };
   if (!banner.title) return res.status(400).json({ error: 'banner title is required' });
-  const wanted = [...new Set([...(Array.isArray(b.photos) ? b.photos : []), b.image && b.image.id].filter((x) => typeof x === 'string'))].slice(0, 3);
+  const wanted = [...new Set([...(Array.isArray(b.photos) ? b.photos : []).map((x) => (x && x.id) || x), b.image && b.image.id].filter((x) => typeof x === 'string'))].slice(0, 3);
   const ok = wanted.filter((id) => index.library().some((d) => d.source === 'drive' && driveId(d.url) === id));
   const product = (await Promise.all(ok.map(async (id) => { const t = await fetchThumb(id, 1000).catch(() => null); return t && { ...t, crop: BANNER_CROPS[id] || null }; }))).filter(Boolean);
   try {

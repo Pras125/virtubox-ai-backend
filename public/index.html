@@ -7,6 +7,7 @@
 <title>VirtuBox Sales Copilot</title>
 <script src="/vendor/marked.min.js"></script>
 <script src="/vendor/purify.min.js"></script>
+<script src="/icons.js"></script>
 <script src="/banner.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -335,7 +336,7 @@ function addBot(text, sources, banner) {
 // ───────── Banners ─────────
 async function showBanner(el, banner, opts = {}) {
   const box = el.querySelector('.banner');
-  const st = { data: JSON.parse(JSON.stringify(banner)), theme: 'light', photo: null };
+  const st = { data: JSON.parse(JSON.stringify(banner)), theme: banner.poster && banner.poster.headline ? 'event' : 'light', photo: null };
   const caption = banner.caption || banner.tagline || '';
   const fileName = () => `VirtuBox - ${String(st.data.title || 'banner').replace(/[^\w\- ]+/g, '').trim() || 'banner'}.png`;
   const canvas = await renderBanner(st.data, st);
@@ -354,8 +355,8 @@ async function showBanner(el, banner, opts = {}) {
       <button data-b="edit" class="alt">✏️ Edit text</button>
       <button data-b="photo" class="alt">🖼 Change photo</button>
     </div>
-    ${window.__imageGen ? `<div class="banner-themes"><button data-b="ai" class="on">✨ AI design</button><button data-aistyle="blue" class="on">Bold blue</button><button data-aistyle="light">Light</button><span class="ai-note"></span></div>` : ''}
-    <div class="banner-themes">Template style: ${BANNER_THEMES.map((t) => `<button data-theme="${t.id}" class="${t.id === 'light' ? 'on' : ''}">${t.name}</button>`).join('')}</div>
+    ${window.__imageGen ? `<div class="banner-themes"><button data-b="ai" class="on">✨ Creative AI</button><button data-aistyle="blue" class="on">Bold blue</button><button data-aistyle="light">Light</button><span class="ai-note"></span></div>` : ''}
+    <div class="banner-themes">Template style: ${BANNER_THEMES.map((t) => `<button data-theme="${t.id}" class="${t.id === st.theme ? 'on' : ''}">${t.name}</button>`).join('')}</div>
     <input type="file" accept="image/*" class="hidden">
     <form class="banner-edit hidden">
       <label>Heading<input name="title" maxlength="60"></label>

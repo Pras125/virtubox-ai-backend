@@ -6,7 +6,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
-      "includeFiles": "{data/knowledge-index.json,public/index.html,assets/*.jpg}"
+      "includeFiles": "{data/knowledge-index.json,public/index.html,public/icons.js,assets/*.jpg}"
     }
   },
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
