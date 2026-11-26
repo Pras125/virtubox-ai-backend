@@ -1,5 +1,219 @@
 {
-  "_comment": "Where the product photo sits on each Drive one-pager, as fractions of the page (x, y, w, h). One-pagers not listed here appear on the banner as the whole page.",
-  "1ubhrNLW05hzZ9DP0pgvroBI4nxAmXozY": { "x": 0.09, "y": 0.224, "w": 0.185, "h": 0.425 },
-  "1T1tLXLH71ksYS_IbmwCP2ZBuwqCD7YA7": { "x": 0.695, "y": 0.018, "w": 0.24, "h": 0.502 }
+  "_comment": "Where the product photo sits on each Drive one-pager, as fractions of the page (x, y, w, h). One-pagers not listed here get a plain kiosk drawing on the poster.",
+  "11lv41pf4JtNAsbzmhE2jW_a7-pcJECz4": {
+    "x": 0.395,
+    "y": 0.21,
+    "w": 0.22,
+    "h": 0.415
+  },
+  "1t47O9hZDyQuLJJSDE5Sh5SN4gZFjMU-Q": {
+    "x": 0.054,
+    "y": 0.122,
+    "w": 0.888,
+    "h": 0.24
+  },
+  "12g9NrYKh7GeMQQrrfBPEwWgvlwatIDXW": {
+    "x": 0.035,
+    "y": 0.04,
+    "w": 0.285,
+    "h": 0.44
+  },
+  "16nNc-IDUEuHIenode7FlsTfE0JFJMtr5": {
+    "x": 0.32,
+    "y": 0.2,
+    "w": 0.34,
+    "h": 0.16
+  },
+  "1VUd_zLl08NW529pOF5hWgd8uJTQxdJni": {
+    "x": 0.345,
+    "y": 0.29,
+    "w": 0.3,
+    "h": 0.36
+  },
+  "17pNobVDD5s_zLQ4ATUOJoXGYJo37j8Ef": {
+    "x": 0.385,
+    "y": 0.235,
+    "w": 0.23,
+    "h": 0.37
+  },
+  "1ZsiiMZU95oIxeJ1_En-PGBmVfMSRucou": {
+    "x": 0.55,
+    "y": 0.03,
+    "w": 0.42,
+    "h": 0.3
+  },
+  "1nEuEYUvGODCWtzw9QoQyiliUrgljC-IT": {
+    "x": 0.6,
+    "y": 0.04,
+    "w": 0.38,
+    "h": 0.72
+  },
+  "12EfuVhzSYxdXcrE6HLxzbyb9QhHH9Tqs": {
+    "x": 0.6,
+    "y": 0.02,
+    "w": 0.37,
+    "h": 0.66
+  },
+  "1bx0JfclMtCPPiuEvTF4MurmLueiKCBz3": {
+    "x": 0.1,
+    "y": 0.0,
+    "w": 0.35,
+    "h": 0.52
+  },
+  "1gf6LNTRFxzVPgpcUpp-ztes-9tjEAecm": {
+    "x": 0.11,
+    "y": 0.19,
+    "w": 0.17,
+    "h": 0.37
+  },
+  "1XuV78BYwFYpxDLsQgNPakfG4_U56fz-0": {
+    "x": 0.62,
+    "y": 0.03,
+    "w": 0.3,
+    "h": 0.43
+  },
+  "1Hov21g1C7nbo_C_RxB3XsJjLYPiQN0gS": {
+    "x": 0.58,
+    "y": 0.02,
+    "w": 0.37,
+    "h": 0.29
+  },
+  "1v91363U36CK7NWKuC0853Dl6pAIueb7w": {
+    "x": 0.54,
+    "y": 0.02,
+    "w": 0.43,
+    "h": 0.66
+  },
+  "1kFXgR72wag2K1RG27Zc10GaPzP2IMer0": {
+    "x": 0.43,
+    "y": 0.03,
+    "w": 0.53,
+    "h": 0.22
+  },
+  "1lPkIwNJc-z60AXf-Q-EodmvZ3rr1Xowg": {
+    "x": 0.6,
+    "y": 0.02,
+    "w": 0.38,
+    "h": 0.65
+  },
+  "1ubhrNLW05hzZ9DP0pgvroBI4nxAmXozY": {
+    "x": 0.09,
+    "y": 0.224,
+    "w": 0.185,
+    "h": 0.425
+  },
+  "1T1tLXLH71ksYS_IbmwCP2ZBuwqCD7YA7": {
+    "x": 0.695,
+    "y": 0.018,
+    "w": 0.24,
+    "h": 0.502
+  },
+  "1kkG4Gn2DgeQS_x1NfJkU8VOKib8fn2Z7": {
+    "x": 0.07,
+    "y": 0.03,
+    "w": 0.28,
+    "h": 0.55
+  },
+  "1lDElsoZoM2moDFZZ2NeW_8trll1ajhLc": {
+    "x": 0.72,
+    "y": 0.02,
+    "w": 0.26,
+    "h": 0.32
+  },
+  "1cIjkLuxCJktSCAhSEFowSoFPsjNPb_Vh": {
+    "x": 0.695,
+    "y": 0.015,
+    "w": 0.235,
+    "h": 0.5
+  },
+  "1vr8haHrhUV-dIM70Q7Q6RI-Tn-pd7FL7": {
+    "x": 0.6,
+    "y": 0.05,
+    "w": 0.33,
+    "h": 0.72
+  },
+  "1uf40hudzZhOzX8u8ayVt84JR9SLQQBji": {
+    "x": 0.65,
+    "y": 0.02,
+    "w": 0.31,
+    "h": 0.43
+  },
+  "1rdF7vwvZ2jMQsS5usUrUDN4MsMyhuyQi": {
+    "x": 0.69,
+    "y": 0.025,
+    "w": 0.28,
+    "h": 0.64
+  },
+  "1fySXtVEJHaxza1E-k2t6eCQgHHW6B1gJ": {
+    "x": 0.69,
+    "y": 0.015,
+    "w": 0.24,
+    "h": 0.57
+  },
+  "10IlDNF1WLmbzg5l2QmoF1jyauAioLRjq": {
+    "x": 0.7,
+    "y": 0.015,
+    "w": 0.26,
+    "h": 0.5
+  },
+  "1ohYjBybkc65EmuZMbhCyraTuf3pAKbUw": {
+    "x": 0.72,
+    "y": 0.015,
+    "w": 0.23,
+    "h": 0.5
+  },
+  "13i5VM7kpmuReMwU-eHqAATmYIDGPb3_C": {
+    "x": 0.42,
+    "y": 0.03,
+    "w": 0.55,
+    "h": 0.22
+  },
+  "1BoPQWf8NK88Gojs6byZUp9KLSI27w4GX": {
+    "x": 0.075,
+    "y": 0.23,
+    "w": 0.21,
+    "h": 0.42
+  },
+  "1iAQh41kgF1oLNa7roZk-f2CtCZqJnxND": {
+    "x": 0.48,
+    "y": 0.03,
+    "w": 0.46,
+    "h": 0.23
+  },
+  "1WG_RAUj1Y4Wx2X578PHzd2BNjjRCB0Ev": {
+    "x": 0.57,
+    "y": 0.02,
+    "w": 0.39,
+    "h": 0.31
+  },
+  "1Vsl6XdoQNn9oxTICOE0uCRkprAwa5rg7": {
+    "x": 0.05,
+    "y": 0.265,
+    "w": 0.4,
+    "h": 0.27
+  },
+  "116zVEHuBAvZr0GWQvUTixwXGK1kNlA0O": {
+    "x": 0.07,
+    "y": 0.225,
+    "w": 0.225,
+    "h": 0.39
+  },
+  "1B9UuEy3_bGS97E6qEuSziFEQ-OffVu4N": {
+    "x": 0.05,
+    "y": 0.23,
+    "w": 0.31,
+    "h": 0.4
+  },
+  "1HD3cvguSHi8-t6EG6Hd9qJU58WkroqFn": {
+    "x": 0.34,
+    "y": 0.27,
+    "w": 0.33,
+    "h": 0.28
+  },
+  "1oTtjN1KPKgLQB9PrKPa2un6_h_fPcOAT": {
+    "x": 0.035,
+    "y": 0.255,
+    "w": 0.73,
+    "h": 0.26
+  }
 }

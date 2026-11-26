@@ -108,11 +108,23 @@ const isBannerRequest = (m) => BANNER_WORD.test(m) && BANNER_ASK.test(m) && !/\b
 // What a banner request is about: its own words minus the banner / filler words, or else the topic of the last few asks in the chat.
 const FILLER = /\b(banners?|posters?|flyers?|infographics?|creatives?|whatsapp|wa|status|stor(y|ies)|insta(gram)?|create|make|generate|design|build|prepare|draft|give|send|need|want|get|change|update|edit|redo|i|said|a|an|the|for|me|my|to|of|please|with|all|its|it|details?|good|nice|proper|again|that|this|on|in|and)\b/gi;
 const topicOf = (m) => String(m || '').replace(FILLER, ' ').replace(/\s+/g, ' ').trim();
+// "helath scan kiosk" -> "health scan kiosk": swap an unknown word for the closest word used in the one-pager titles
+const editDist = (a, b) => { const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]); for (let j = 1; j <= b.length; j++) d[0][j] = j; for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[a.length][b.length]; };
+let vocabFor = null, vocab = new Set();
+function fixTypos(text) {
+  if (vocabFor !== index) { vocabFor = index; vocab = new Set(index.library().flatMap((d) => (String(d.title).toLowerCase().match(/[a-z]{4,}/g) || []))); }
+  return String(text).split(/\s+/).map((w) => {
+    const lw = w.toLowerCase().replace(/[^a-z]/g, '');
+    if (lw.length < 5 || vocab.has(lw) || vocab.has(lw.replace(/s$/, ''))) return w;
+    let best = null, bd = 3; for (const v of vocab) { if (Math.abs(v.length - lw.length) > 2) continue; const dd = editDist(lw, v); if (dd < bd) { bd = dd; best = v; } }
+    return best && bd <= 2 ? best : w;
+  }).join(' ');
+}
 const bannerTopic = (message, convo) => {
-  const own = topicOf(message);
+  const own = fixTypos(topicOf(message));
   if (own.split(' ').filter(Boolean).length >= 2) return own;
   const last = [...convo.messages].reverse().map((m) => (m.role === 'user' ? topicOf(m.content) : '')).find((t) => t.split(' ').filter(Boolean).length >= 2); // newest ask that names something
-  return `${own} ${last || ''}`.trim() || message;
+  return `${own} ${last ? fixTypos(last) : ''}`.trim() || message;
 };
 const BANNER_SYSTEM = `You write the copy for a VirtuBox sales banner or infographic: one portrait image a salesperson posts as a WhatsApp status or sends to a client.
 For an infographic or story, give 5 to 6 features and fill specs and ideal whenever the knowledge allows, so the image is rich with real content.
@@ -189,17 +201,12 @@ function bannerImage(sources, prev) {
   const id = driveId(s.url);
   return { id, crop: BANNER_CROPS[id] || null, title: s.title };
 }
-// Up to three matching one-pagers, shown to the AI image model as product photos.
+// The photo comes from the best-matching one-pager only, so a banner never shows a different product's photo.
 function bannerPhotos(sources, prev) {
-  const seen = new Set(), out = [];
-  for (const x of sources) { // one photo per product: "Print Kiosk (Features)" and "Print Kiosk (Specifications)" are the same kiosk
-    if (x.source !== 'drive' || !driveId(x.url)) continue;
-    const base = String(x.title || '').replace(/\s*\(.*\)\s*$/, '').trim().toLowerCase();
-    if (seen.has(base)) continue;
-    seen.add(base); out.push({ id: driveId(x.url), crop: BANNER_CROPS[driveId(x.url)] || null });
-  }
-  out.sort((x, y) => Number(!!y.crop) - Number(!!x.crop)); // one-pagers with a known photo area first
-  return out.length ? out.slice(0, 2) : prev || [];
+  const top = sources.find((x) => x.source === 'drive' && driveId(x.url));
+  if (!top) return prev || [];
+  const id = driveId(top.url);
+  return [{ id, crop: BANNER_CROPS[id] || null }];
 }
 
 async function makeBanner(message, chunks, history, story) {
